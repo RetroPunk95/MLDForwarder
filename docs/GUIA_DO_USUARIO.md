@@ -1,16 +1,16 @@
-# MLDForwarder 2.8.0 — Guia completo do usuário
+# MLDForwarder 2.8.1 — Guia completo do usuário
 
 ## Sincronize canais, grupos e tópicos do Telegram sem assinatura de encaminhamento
 
 O **MLDForwarder** é uma ferramenta para Windows que copia mensagens entre canais e grupos do Telegram usando a sua própria conta. As mensagens chegam ao destino como novas publicações, sem a indicação “Encaminhada de”.
 
-O programa suporta textos, fotos, vídeos, documentos, legendas e álbuns. A versão 2.8.0 também preserva as formatações compatíveis do Telegram, incluindo negrito, itálico, sublinhado, tachado, spoiler, código, links, menções, citações e emojis personalizados compatíveis.
+O programa suporta textos, fotos, vídeos, documentos, legendas e álbuns. A versão 2.8.1 também preserva as formatações compatíveis do Telegram, incluindo negrito, itálico, sublinhado, tachado, spoiler, código, links, menções, citações e emojis personalizados compatíveis.
 
 Também é possível criar várias rotas, usar tópicos tanto na origem quanto no destino e importar mensagens antigas. Em álbuns, a formatação de cada legenda é tratada separadamente.
 
 Com ele, você pode criar rotas como canal → canal, canal → grupo, canal → tópico, grupo → grupo, grupo → tópico e tópico → tópico.
 
-Este guia foi preparado para o **MLDForwarder 2.8.0**.
+Este guia foi preparado para o **MLDForwarder 2.8.1**.
 
 > Use o programa apenas em canais e grupos aos quais você tem acesso e respeite as regras e os Termos de Serviço do Telegram. O MLDForwarder não é uma ferramenta de spam.
 
@@ -36,7 +36,7 @@ Não é necessário instalar Python.
 
 ### Versão com instalador
 
-1. Baixe o arquivo `MLDForwarder_Setup_v2.8.0.exe`.
+1. Baixe o arquivo `MLDForwarder_Setup_v2.8.1.exe`.
 2. Abra o instalador e siga as instruções exibidas.
 3. Depois da instalação, abra o MLDForwarder pelo atalho criado no Windows.
 
@@ -55,7 +55,7 @@ Não execute o programa diretamente de dentro do ZIP. Os três executáveis abai
 
 Você não precisa abrir os dois motores manualmente. O `MLDForwarder.exe` inicia cada um quando necessário.
 
-> A versão 2.8.0 ainda não possui assinatura digital. Por isso, o Windows pode exibir um aviso do SmartScreen. Se o arquivo veio da fonte oficial do projeto, clique em **Mais informações** e depois em **Executar assim mesmo**.
+> A versão 2.8.1 ainda não possui assinatura digital. Por isso, o Windows pode exibir um aviso do SmartScreen. Se o arquivo veio da fonte oficial do projeto, clique em **Mais informações** e depois em **Executar assim mesmo**.
 
 ![Arquivos da versão portátil dentro da pasta extraída](images/01-pasta-portatil.png)
 
@@ -467,7 +467,11 @@ Não. O conteúdo é reenviado como uma nova mensagem, sem assinatura de encamin
 
 ### A formatação original dos textos é preservada?
 
-Sim. O MLDForwarder 2.8.0 preserva as formatações compatíveis de textos e legendas, como negrito, itálico, sublinhado, tachado, spoiler, código, links, menções, citações e emojis personalizados compatíveis. Em álbuns, cada legenda mantém sua própria formatação.
+Sim. O MLDForwarder 2.8.1 preserva as formatações compatíveis de textos e legendas, como negrito, itálico, sublinhado, tachado, spoiler, código, links, menções, citações e emojis personalizados compatíveis. Em álbuns, cada legenda mantém sua própria formatação. Se uma legenda ultrapassar o limite aceito pela conta, a mídia será enviada primeiro e o texto completo aparecerá logo depois.
+
+### O que acontece com mensagens que possuem prévia de link?
+
+Elas são reenviadas como texto e o Telegram recria a prévia da página no destino. A aparência pode mudar caso o site tenha atualizado sua imagem ou seus metadados.
 
 ### Posso sincronizar vários canais?
 
@@ -507,7 +511,7 @@ Não. Os executáveis já incluem os componentes necessários.
 
 ### Posso usar a mesma configuração depois de atualizar?
 
-Sim. A versão 2.8.0 mantém compatibilidade com as rotas, a sessão e os arquivos de progresso das versões recentes anteriores do projeto, incluindo rotas antigas sem tópico de destino.
+Sim. A versão 2.8.1 mantém compatibilidade com as rotas, a sessão e os arquivos de progresso das versões recentes anteriores do projeto, incluindo rotas antigas sem tópico de destino.
 
 ---
 
@@ -517,7 +521,7 @@ Antes de configurar canais importantes, crie uma origem e um destino de teste. E
 
 Depois do teste, você já pode cadastrar as rotas definitivas e manter o MLDForwarder trabalhando no Dashboard.
 
-**MLDForwarder 2.8.0 — sincronização organizada, histórico preservado e controle em uma única interface.**
+**MLDForwarder 2.8.1 — sincronização organizada, histórico preservado e controle em uma única interface.**
 
 ---
 
