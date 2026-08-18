@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 2.8.1 — Hotfix de compatibilidade
+
+- Corrige o envio de mídias cuja legenda ultrapassa o limite da conta no Telegram.
+- Envia a mídia sem legenda e publica o texto completo logo depois, sem perder conteúdo ou formatação.
+- Aplica o mesmo tratamento de legendas longas a álbuns.
+- Corrige mensagens com `MessageMediaWebPage`, que agora são recriadas como texto com prévia de link.
+- Aplica as correções à sincronização normal, retroativa e às retentativas.
+- Mantém compatibilidade com rotas, sessão, configurações e progresso da versão 2.8.0.
+
 ## 2.8.0 — Release Kit v1.9
 
 - Preserva a formatação original de textos e legendas no destino.
@@ -53,4 +62,3 @@
 - Mantém progresso normal e retroativo separado por rota.
 - Reenvia como nova mensagem, sem assinatura de encaminhamento.
 - Mantém suporte a textos, fotos, vídeos, documentos, legendas e álbuns.
-

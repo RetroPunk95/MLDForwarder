@@ -79,7 +79,7 @@ echo  INSTALADOR CONCLUIDO
 echo ============================================================
 echo.
 echo Arquivo:
-echo   release\installer\MLDForwarder_Setup_v2.8.0.exe
+echo   release\installer\MLDForwarder_Setup_v2.8.1.exe
 echo.
 pause
 exit /b 0

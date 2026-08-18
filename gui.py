@@ -37,7 +37,7 @@ if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
 else:
     BASE_DIR = Path(__file__).resolve().parent
-VERSION = "2.8.0-exe"
+VERSION = "2.8.1-exe"
 API_PORTAL_URL = "https://my.telegram.org/"
 
 

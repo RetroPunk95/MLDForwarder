@@ -1,5 +1,5 @@
 #define MyAppName "MLDForwarder"
-#define MyAppVersion "2.8.0"
+#define MyAppVersion "2.8.1"
 #define MyAppExeName "MLDForwarder.exe"
 #define MyAppSyncExeName "MLDForwarderSync.exe"
 #define MyAppRetroExeName "MLDForwarderRetro.exe"

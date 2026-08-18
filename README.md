@@ -17,6 +17,7 @@ O MLDForwarder copia mensagens entre conversas às quais a sua conta tem acesso.
 - busca de tópicos diretamente pela interface;
 - suporte a textos, fotos, vídeos, documentos, legendas e álbuns;
 - preservação de formatações compatíveis do Telegram;
+- tratamento seguro de legendas longas e prévias de links;
 - progresso salvo para continuar de onde parou;
 - versão portátil e instalador para Windows.
 
@@ -26,7 +27,7 @@ Baixe a versão mais recente na página de [Releases](../../releases/latest).
 
 | Opção | Indicação |
 |---|---|
-| `MLDForwarder_Setup_v2.8.0.exe` | Instalação comum no Windows, com atalhos e desinstalador. |
+| `MLDForwarder_Setup_v2.8.1.exe` | Instalação comum no Windows, com atalhos e desinstalador. |
 | `MLDForwarder_Portable.zip` | Uso sem instalação. Extraia o ZIP antes de executar. |
 
 > O projeto ainda não possui assinatura digital. O Windows SmartScreen pode exibir um aviso de editor desconhecido. Confira se o arquivo veio desta página e valide o SHA-256 publicado na Release.
@@ -55,13 +56,15 @@ O passo a passo completo está no [Guia do Usuário](docs/GUIA_DO_USUARIO.md).
 
 ## Formatação preservada
 
-A versão 2.8.0 preserva, quando suportados pelo Telegram:
+A versão 2.8.1 preserva, quando suportados pelo Telegram:
 
 - negrito, itálico, sublinhado e tachado;
 - spoiler e código;
 - links, menções e citações;
 - emojis personalizados compatíveis;
 - formatação individual das legendas de álbuns.
+
+Quando uma legenda excede o limite aceito pela conta, a mídia é enviada primeiro e o texto completo aparece logo depois, com sua formatação preservada. Mensagens com links também recriam a prévia da página no destino.
 
 ## Dados locais e segurança
 
@@ -114,4 +117,3 @@ MLDForwarder é um projeto independente e não possui vínculo, patrocínio ou a
 ## Licença
 
 O projeto é distribuído sob a licença descrita em [LICENSE](LICENSE). O código pode ser consultado para auditoria, mas redistribuição, modificação, reempacotamento e comercialização exigem autorização prévia do autor.
-

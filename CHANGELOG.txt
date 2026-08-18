@@ -1,6 +1,16 @@
 MLDForwarder — Histórico de versões
 ===================================
 
+2.8.1 / Hotfix de compatibilidade
+
+- Corrige mídias com legendas acima do limite da conta no Telegram.
+- Envia a mídia sem legenda e publica o texto completo logo depois.
+- Preserva o conteúdo e a formatação das legendas longas.
+- Aplica o mesmo tratamento a álbuns.
+- Corrige mensagens com prévia de link que eram tratadas como arquivos.
+- Aplica as correções aos modos normal, retroativo e às retentativas.
+- Mantém rotas, sessão, configurações e progresso da versão 2.8.0.
+
 2.8.0 / Release Kit v1.9
 
 - Preserva a formatação original de textos e legendas no destino.

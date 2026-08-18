@@ -4,8 +4,9 @@ import sys
 import os
 
 from dotenv import load_dotenv
-from telethon import TelegramClient
-from telethon.errors import FloodWaitError
+from telethon import TelegramClient, utils
+from telethon.errors import FloodWaitError, MediaCaptionTooLongError
+from telethon.tl.types import MessageMediaWebPage
 
 
 # Mantém o log em tempo real quando o motor é executado
@@ -368,6 +369,51 @@ async def esperar_floodwait(error):
 # ENVIO
 # ============================================================
 
+async def enviar_texto_formatado(
+    client,
+    destino,
+    texto,
+    entidades=None,
+    topico_destino_id=None,
+    link_preview=True
+):
+
+    if not texto:
+        return
+
+    for trecho, entidades_trecho in utils.split_text(
+        texto,
+        entidades or [],
+        limit=4096
+    ):
+
+        await client.send_message(
+            destino,
+            trecho,
+            formatting_entities=entidades_trecho,
+            parse_mode=None,
+            link_preview=link_preview,
+            reply_to=topico_destino_id
+        )
+
+
+def obter_texto_previa_link(mensagem):
+
+    if mensagem.message:
+        return mensagem.message
+
+    pagina = getattr(
+        mensagem.media,
+        "webpage",
+        None
+    )
+
+    return (
+        getattr(pagina, "url", "")
+        or getattr(pagina, "display_url", "")
+    )
+
+
 async def enviar_mensagem(
     client,
     destino,
@@ -375,25 +421,69 @@ async def enviar_mensagem(
     topico_destino_id=None
 ):
 
+    if isinstance(
+        mensagem.media,
+        MessageMediaWebPage
+    ):
+
+        await enviar_texto_formatado(
+            client,
+            destino,
+            obter_texto_previa_link(mensagem),
+            mensagem.entities or [],
+            topico_destino_id,
+            link_preview=True
+        )
+
+        return
+
     if mensagem.media:
 
-        await client.send_file(
-            destino,
-            mensagem.media,
-            caption=mensagem.message or "",
-            formatting_entities=mensagem.entities or [],
-            reply_to=topico_destino_id
-        )
+        try:
+
+            await client.send_file(
+                destino,
+                mensagem.media,
+                caption=mensagem.message or "",
+                formatting_entities=mensagem.entities or [],
+                parse_mode=None,
+                reply_to=topico_destino_id
+            )
+
+        except MediaCaptionTooLongError:
+
+            await client.send_file(
+                destino,
+                mensagem.media,
+                caption="",
+                reply_to=topico_destino_id
+            )
+
+            await enviar_texto_formatado(
+                client,
+                destino,
+                mensagem.message or "",
+                mensagem.entities or [],
+                topico_destino_id,
+                link_preview=False
+            )
+
+            print(
+                f"  Aviso: legenda da mensagem "
+                f"{mensagem.id} enviada como texto separado."
+            )
 
         return
 
     if mensagem.message:
 
-        await client.send_message(
+        await enviar_texto_formatado(
+            client,
             destino,
             mensagem.message,
-            formatting_entities=mensagem.entities or [],
-            reply_to=topico_destino_id
+            mensagem.entities or [],
+            topico_destino_id,
+            link_preview=True
         )
 
 
@@ -407,11 +497,22 @@ async def enviar_album(
     arquivos = []
     legendas = []
     entidades = []
+    mensagens_com_midia = []
 
     for mensagem in mensagens:
 
-        if not mensagem.media:
+        if (
+            not mensagem.media
+            or isinstance(
+                mensagem.media,
+                MessageMediaWebPage
+            )
+        ):
             continue
+
+        mensagens_com_midia.append(
+            mensagem
+        )
 
         arquivos.append(
             mensagem.media
@@ -430,23 +531,49 @@ async def enviar_album(
 
     if len(arquivos) == 1:
 
-        await client.send_file(
+        await enviar_mensagem(
+            client,
             destino,
-            arquivos[0],
-            caption=legendas[0],
-            formatting_entities=entidades[0],
-            reply_to=topico_destino_id
+            mensagens_com_midia[0],
+            topico_destino_id
         )
 
         return
 
-    await client.send_file(
-        destino,
-        arquivos,
-        caption=legendas,
-        formatting_entities=entidades,
-        reply_to=topico_destino_id
-    )
+    try:
+
+        await client.send_file(
+            destino,
+            arquivos,
+            caption=legendas,
+            formatting_entities=entidades,
+            parse_mode=None,
+            reply_to=topico_destino_id
+        )
+
+    except MediaCaptionTooLongError:
+
+        await client.send_file(
+            destino,
+            arquivos,
+            reply_to=topico_destino_id
+        )
+
+        for mensagem in mensagens_com_midia:
+
+            await enviar_texto_formatado(
+                client,
+                destino,
+                mensagem.message or "",
+                mensagem.entities or [],
+                topico_destino_id,
+                link_preview=False
+            )
+
+        print(
+            "  Aviso: legendas longas do álbum "
+            "enviadas como texto separado."
+        )
 
 
 # ============================================================

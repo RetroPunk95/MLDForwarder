@@ -1,4 +1,4 @@
-MLDForwarder — Release Kit v1.9
+MLDForwarder — Release Kit v1.9.1
 ================================
 
 OBJETIVO
@@ -96,7 +96,7 @@ abre o portal oficial no navegador padrão. O endereço usado é:
 
 ROTAS COM TÓPICOS
 
-A versão 2.8.0 aceita canais, grupos e tópicos tanto na origem quanto no destino:
+A versão 2.8.1 aceita canais, grupos e tópicos tanto na origem quanto no destino:
 - canal ou grupo inteiro
 - tópico específico dentro de um grupo com fórum
 
@@ -133,7 +133,7 @@ INSTALLER WINDOWS
 
 Depois de validar os executáveis, este kit também pode gerar:
 
-    MLDForwarder_Setup_v2.8.0.exe
+    MLDForwarder_Setup_v2.8.1.exe
 
 O instalador:
 - instala por usuário em %LOCALAPPDATA%\MLDForwarder

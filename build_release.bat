@@ -32,6 +32,6 @@ echo Portatil:
 echo   release\MLDForwarder_Portable.zip
 echo.
 echo Instalador:
-echo   release\installer\MLDForwarder_Setup_v2.8.0.exe
+echo   release\installer\MLDForwarder_Setup_v2.8.1.exe
 echo.
 pause
