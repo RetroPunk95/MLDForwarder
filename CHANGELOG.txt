@@ -1,0 +1,79 @@
+MLDForwarder — Histórico de versões
+===================================
+
+2.8.0 / Release Kit v1.9
+
+- Preserva a formatação original de textos e legendas no destino.
+- Mantém negrito, itálico, sublinhado, tachado, spoiler e código.
+- Mantém links, menções, citações e emojis personalizados compatíveis.
+- Preserva separadamente a formatação de cada legenda em álbuns.
+- Aplica a melhoria à sincronização normal, retroativa e retentativas.
+- Mantém o tema azul #0083E8, o icon.ico e todas as rotas da versão 2.7.0.
+
+2.7.0 / Release Kit v1.8
+
+- Adiciona destino opcional em tópico de grupo.
+- Permite canal para tópico, grupo para tópico e tópico para tópico.
+- Inclui busca e seleção de tópicos também no lado do destino.
+- Aplica o tópico de destino a textos, fotos, vídeos, documentos e álbuns.
+- Atualiza a sincronização normal, retroativa e as retentativas de falhas.
+- Adiciona a coluna "Tópico destino" à lista de rotas.
+- Mantém compatibilidade total com rotas antigas sem target_topic_id.
+
+2.6.1 / Release Kit v1.7
+
+- Corrige a inicialização do retroativo em rotas com ID negativo e tópico.
+- Passa a chave da rota no formato seguro --canal=<origem>:<tópico>.
+- Mantém compatibilidade total com configurações, rotas e progressos da versão 2.6.0.
+
+2.6.0 / Release Kit v1.6
+
+- Adiciona descrições visíveis às configurações da sincronização normal.
+- Explica o efeito de aumentar ou diminuir o lote e o intervalo.
+- Adiciona explicações a todos os campos do modo retroativo.
+- Informa os valores padrão diretamente na interface.
+- Mantém configurações, rotas, progresso e sessão compatíveis.
+
+2.5.0 / Release Kit v1.5
+
+- Renomeia o programa de TGForwarder para MLDForwarder.
+- Atualiza o nome da interface, executáveis, instalador e pacotes portáteis.
+- Adiciona um link clicável para https://my.telegram.org/ na área da API.
+- Mantém os nomes e formatos dos arquivos de configuração e progresso.
+- Mantém a sessão padrão user_session para reaproveitar o login existente.
+- Preserva compatibilidade com channels.json e progressos das versões anteriores.
+
+2.4.0 / Release Kit v1.4
+
+- Adiciona o botão "Buscar tópicos" ao criar ou editar uma rota.
+- Consulta os tópicos pela sessão Telegram já autenticada no programa.
+- Exibe cada opção como "ID — nome do tópico" para seleção direta.
+- Preenche automaticamente o campo "ID do tópico" após a seleção.
+- Pagina a consulta para grupos com mais de 100 tópicos.
+- Mantém o preenchimento manual do ID como alternativa.
+- Não altera channels.json até o usuário salvar a rota.
+- Preserva total compatibilidade com rotas e progressos da versão 2.3.0.
+
+2.3.0 / Release Kit v1.3
+
+- Adiciona rotas de tópico de grupo para canal.
+- Inclui o campo opcional "ID do tópico" na tela Rotas.
+- Permite cadastrar vários tópicos do mesmo grupo simultaneamente.
+- Mantém progresso normal e retroativo separado por rota.
+- Filtra o tópico na inicialização, nos lotes e na extensão de álbuns.
+- Preserva compatibilidade com channels.json e progressos anteriores.
+- Mantém reenvio como nova mensagem, sem assinatura de encaminhamento.
+- Mantém suporte a texto, fotos, vídeos, documentos, legendas e álbuns.
+
+Formato de uma rota com tópico em channels.json:
+
+{
+    "-1001234567890:357": {
+        "source_id": -1001234567890,
+        "topic_id": 357,
+        "target_id": -1009876543210,
+        "name": "Filmes do grupo"
+    }
+}
+
+O campo topic_id deve ficar ausente ou null para sincronizar a origem inteira.

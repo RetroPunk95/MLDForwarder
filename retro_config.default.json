@@ -1,0 +1,6 @@
+{
+    "limite": 1000,
+    "a_partir_do_id": 0,
+    "tamanho_lote": 100,
+    "tentativas_erro": 3
+}
