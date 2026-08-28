@@ -1,4 +1,4 @@
-# MLDForwarder Android 1.0.0-rc1
+# MLDForwarder Android 1.0.0
 
 Versão Android do núcleo do MLDForwarder, direcionada à sincronização normal e
 retroativa de canais, grupos e tópicos do Telegram. Compatível com Android 7 ou
@@ -34,16 +34,15 @@ superior e validada inicialmente no Android 12.
 Os IDs continuam visíveis e editáveis para permitir configurações avançadas e
 uso de `@username` quando necessário.
 
-## Segurança e atualização do alpha
+## Segurança e migração do alpha
 
-As credenciais que estavam no armazenamento comum da versão alpha são migradas
-automaticamente para dados cifrados na primeira abertura da nova versão. A
-senha 2FA e o código de login não são armazenados.
+API ID, API Hash e telefone são cifrados com uma chave AES-GCM protegida pelo
+Android Keystore. A senha 2FA e o código de login não são armazenados.
 
-O build de teste usa o identificador `com.retropunk.mldforwarder.rc` e o nome
-**MLDForwarder RC**. Ele pode ser instalado ao lado do alpha aprovado sem
-substituir o aplicativo, a sessão ou as rotas atuais. Por ser uma instalação
-separada, o RC exige um novo login no Telegram.
+O alpha usava uma assinatura temporária do GitHub Actions. Por isso, ele deve
+ser desinstalado antes da instalação estável, o que exige um novo login. A
+partir da v1.0.0, todas as versões oficiais usam a mesma chave definitiva e
+podem ser atualizadas normalmente sem apagar os dados.
 
 ## Compilar
 
@@ -52,16 +51,17 @@ separada, o RC exige um novo login no Telegram.
 3. A primeira compilação baixa o runtime Python, Telethon e dependências.
 
 O projeto usa Chaquopy 17.0, Python 3.11, Telethon 1.40.0 e Android Gradle
-Plugin 8.9.2. O workflow compila as branches `android-alpha` e `android-v1` e
-publica o artefato `MLDForwarder-Android-v1-debug`.
+Plugin 8.9.2. O workflow da branch `android-stable` gera o APK release sem
+assinatura; a assinatura é aplicada fora do repositório com a chave privada do
+projeto.
 
 ## Limites atuais
 
 - o modo de baixar e reenviar mídias protegidas não faz parte do app Android;
 - o serviço pode ser interrompido por otimizações agressivas de bateria do
   fabricante;
-- o APK RC ainda usa assinatura de teste; a chave de distribuição definitiva
-  deve ser criada e guardada pelo responsável pelo projeto.
+- a otimização de bateria deve ser desativada para o MLDForwarder em aparelhos
+  que encerram serviços em segundo plano de forma agressiva.
 
 Não execute a mesma rota simultaneamente no Windows e no Android: cada
 instalação mantém seu próprio progresso e as mensagens podem ser duplicadas.

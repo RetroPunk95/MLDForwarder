@@ -1,11 +1,10 @@
-name: Android v1 build
+name: Android stable build
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - android-alpha
-      - android-v1
+      - android-stable
     paths:
       - "android/app/**"
       - "android/build.gradle"
@@ -39,14 +38,23 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Build debug APK
+      - name: Build unsigned release APK
         working-directory: android
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle :app:assembleRelease --stacktrace
 
-      - name: Upload debug APK
+      - name: Collect official APK signing tool
+        shell: bash
+        run: |
+          apksig_jar=$(find "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build/apksig/8.9.2" -name 'apksig-8.9.2.jar' -type f -print -quit)
+          test -n "$apksig_jar"
+          cp "$apksig_jar" android/app/build/outputs/apk/release/apksig.jar
+
+      - name: Upload unsigned release bundle
         uses: actions/upload-artifact@v4
         with:
-          name: MLDForwarder-Android-v1-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: MLDForwarder-Android-stable-unsigned
+          path: |
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+            android/app/build/outputs/apk/release/apksig.jar
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
