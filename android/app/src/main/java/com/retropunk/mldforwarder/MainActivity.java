@@ -12,7 +12,10 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.View;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -50,6 +53,20 @@ public class MainActivity extends Activity {
     private EditText retroStartIdInput;
     private TextView routeSummaryText;
     private TextView logText;
+    private TextView serviceStatusText;
+    private TextView homeSyncDescriptionText;
+    private TextView homeRouteCountText;
+    private TextView homeAccountMetricText;
+    private TextView homeCurrentRouteTitleText;
+    private TextView homeCurrentRouteFlowText;
+    private TextView headerRouteCountText;
+    private TextView accountStatusText;
+    private View serviceStatusDot;
+    private View homePanel;
+    private View routesPanel;
+    private View activityPanel;
+    private View accountPanel;
+    private String currentPanel = "home";
     private SecurePrefs securePrefs;
     private JSONArray routes = new JSONArray();
     private int selectedRouteIndex = -1;
@@ -63,6 +80,7 @@ public class MainActivity extends Activity {
         bindViews();
         restoreFields();
         bindActions();
+        showPanel("home");
         requestNotificationPermissionIfNeeded();
     }
 
@@ -105,6 +123,19 @@ public class MainActivity extends Activity {
         retroStartIdInput = findViewById(R.id.retroStartIdInput);
         routeSummaryText = findViewById(R.id.routeSummaryText);
         logText = findViewById(R.id.logText);
+        serviceStatusText = findViewById(R.id.serviceStatusText);
+        homeSyncDescriptionText = findViewById(R.id.homeSyncDescriptionText);
+        homeRouteCountText = findViewById(R.id.homeRouteCountText);
+        homeAccountMetricText = findViewById(R.id.homeAccountMetricText);
+        homeCurrentRouteTitleText = findViewById(R.id.homeCurrentRouteTitleText);
+        homeCurrentRouteFlowText = findViewById(R.id.homeCurrentRouteFlowText);
+        headerRouteCountText = findViewById(R.id.headerRouteCountText);
+        accountStatusText = findViewById(R.id.accountStatusText);
+        serviceStatusDot = findViewById(R.id.serviceStatusDot);
+        homePanel = findViewById(R.id.homePanel);
+        routesPanel = findViewById(R.id.routesPanel);
+        activityPanel = findViewById(R.id.activityPanel);
+        accountPanel = findViewById(R.id.accountPanel);
         passwordInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
     }
 
@@ -123,6 +154,12 @@ public class MainActivity extends Activity {
         findViewById(R.id.startNormalButton).setOnClickListener(v -> startSync("normal"));
         findViewById(R.id.startRetroButton).setOnClickListener(v -> startSync("retro"));
         findViewById(R.id.stopButton).setOnClickListener(v -> stopSync());
+        findViewById(R.id.homeOpenRoutesButton).setOnClickListener(v -> showPanel("routes"));
+        findViewById(R.id.clearLogButton).setOnClickListener(v -> logText.setText("Pronto para configurar."));
+        findViewById(R.id.navHome).setOnClickListener(v -> showPanel("home"));
+        findViewById(R.id.navRoutes).setOnClickListener(v -> showPanel("routes"));
+        findViewById(R.id.navActivity).setOnClickListener(v -> showPanel("activity"));
+        findViewById(R.id.navAccount).setOnClickListener(v -> showPanel("account"));
     }
 
     private void sendCode() {
@@ -140,9 +177,11 @@ public class MainActivity extends Activity {
         if (!validateAccount()) return;
         saveFields();
         appendLog("Verificando sessão...");
-        runPython("check_session", result ->
-                        appendLog(result.optString("message", result.optString("error", "Verificação concluída."))),
-                accountJson().toString());
+        runPython("check_session", result -> {
+            boolean authorized = result.optBoolean("authorized", false);
+            updateAccountStatus(authorized);
+            appendLog(result.optString("message", result.optString("error", "Verificação concluída.")));
+        }, accountJson().toString());
     }
 
     private void confirmLogin() {
@@ -160,11 +199,15 @@ public class MainActivity extends Activity {
                     return;
                 }
                 runPython("confirm_password", passwordResult -> {
-                    if (passwordResult.optBoolean("authorized", false)) clearPhoneCodeHash();
+                    boolean authorized = passwordResult.optBoolean("authorized", false);
+                    if (authorized) clearPhoneCodeHash();
+                    updateAccountStatus(authorized);
                     appendLog(passwordResult.optString("message", passwordResult.optString("error", "Senha processada.")));
                 }, accountJson().toString(), password);
             } else {
-                if (result.optBoolean("authorized", false)) clearPhoneCodeHash();
+                boolean authorized = result.optBoolean("authorized", false);
+                if (authorized) clearPhoneCodeHash();
+                updateAccountStatus(authorized);
                 appendLog(result.optString("message", result.optString("error", "Código processado.")));
             }
         }, accountJson().toString(), text(phoneInput), text(codeInput), phoneCodeHash);
@@ -357,6 +400,7 @@ public class MainActivity extends Activity {
             } else {
                 startService(service);
             }
+            updateServiceStatus(true, mode);
             appendLog("Iniciando " + routes.length() + " rota(s) em modo " + mode + ".");
         } catch (JSONException error) {
             appendLog("Configuração inválida: " + error.getMessage());
@@ -367,6 +411,7 @@ public class MainActivity extends Activity {
         appendLog("Solicitando parada segura...");
         executor.execute(() -> PythonBridge.requestStop(getApplicationContext()));
         stopService(new Intent(this, SyncService.class));
+        updateServiceStatus(false, "");
     }
 
     private JSONObject routeJson() throws JSONException {
@@ -509,6 +554,74 @@ public class MainActivity extends Activity {
     private void updateRouteSummary() {
         String selected = selectedRouteIndex >= 0 ? " · editando " + (selectedRouteIndex + 1) : " · nova rota";
         routeSummaryText.setText(routes.length() + " rota(s) salva(s)" + selected);
+        String count = String.valueOf(routes.length());
+        headerRouteCountText.setText(count);
+        homeRouteCountText.setText(routes.length() < 10 ? "0" + count : count);
+        homeSyncDescriptionText.setText(routes.length() == 0
+                ? "Cadastre uma rota para começar."
+                : routes.length() + " rota(s) pronta(s) para sincronização normal ou retroativa.");
+
+        JSONObject selectedRoute = selectedRouteIndex >= 0 ? routes.optJSONObject(selectedRouteIndex) : null;
+        if (selectedRoute == null && routes.length() > 0) selectedRoute = routes.optJSONObject(0);
+        if (selectedRoute == null) {
+            homeCurrentRouteTitleText.setText("Nenhuma rota selecionada");
+            homeCurrentRouteFlowText.setText("Abra o gerenciador para configurar origem e destino.");
+        } else {
+            homeCurrentRouteTitleText.setText(selectedRoute.optString("name", "Rota"));
+            String source = selectedRoute.optString("source", "Origem");
+            String target = selectedRoute.optString("target", "Destino");
+            homeCurrentRouteFlowText.setText(source + "  →  " + target);
+        }
+    }
+
+    private void showPanel(String panel) {
+        currentPanel = panel;
+        homePanel.setVisibility("home".equals(panel) ? View.VISIBLE : View.GONE);
+        routesPanel.setVisibility("routes".equals(panel) ? View.VISIBLE : View.GONE);
+        activityPanel.setVisibility("activity".equals(panel) ? View.VISIBLE : View.GONE);
+        accountPanel.setVisibility("account".equals(panel) ? View.VISIBLE : View.GONE);
+
+        updateNavItem(R.id.navHome, R.id.navHomeIcon, R.id.navHomeLabel, "home".equals(panel));
+        updateNavItem(R.id.navRoutes, R.id.navRoutesIcon, R.id.navRoutesLabel, "routes".equals(panel));
+        updateNavItem(R.id.navActivity, R.id.navActivityIcon, R.id.navActivityLabel, "activity".equals(panel));
+        updateNavItem(R.id.navAccount, R.id.navAccountIcon, R.id.navAccountLabel, "account".equals(panel));
+    }
+
+    private void updateNavItem(int containerId, int iconId, int labelId, boolean selected) {
+        LinearLayout container = findViewById(containerId);
+        ImageView icon = findViewById(iconId);
+        TextView label = findViewById(labelId);
+        int color = getColor(selected ? R.color.primary_light : R.color.text_muted);
+        container.setBackgroundResource(selected ? R.drawable.bg_nav_selected : android.R.color.transparent);
+        icon.setColorFilter(color);
+        label.setTextColor(color);
+    }
+
+    private void updateAccountStatus(boolean authorized) {
+        accountStatusText.setText(authorized ? "Conta conectada" : "Sessão não conectada");
+        accountStatusText.setTextColor(getColor(authorized ? R.color.success : R.color.text_primary));
+        homeAccountMetricText.setText(authorized ? "Conectada" : "Verificar");
+        homeAccountMetricText.setTextColor(getColor(authorized ? R.color.success : R.color.text_primary));
+    }
+
+    private void updateServiceStatus(boolean running, String mode) {
+        serviceStatusDot.setBackgroundResource(running ? R.drawable.bg_status_active : R.drawable.bg_status_idle);
+        if (running) {
+            serviceStatusText.setText("Sincronização " + ("retro".equals(mode) ? "retroativa" : "normal") + " ativa");
+            serviceStatusText.setTextColor(getColor(R.color.success));
+        } else {
+            serviceStatusText.setText("Serviço pausado");
+            serviceStatusText.setTextColor(getColor(R.color.text_secondary));
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!"home".equals(currentPanel)) {
+            showPanel("home");
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private void requestNotificationPermissionIfNeeded() {

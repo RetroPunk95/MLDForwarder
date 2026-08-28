@@ -1,304 +1,170 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
-    android:fillViewport="true">
+    android:orientation="vertical">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
+        android:layout_height="76dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         android:paddingStart="20dp"
-        android:paddingTop="24dp"
-        android:paddingEnd="20dp"
-        android:paddingBottom="40dp">
+        android:paddingEnd="20dp">
+
+        <FrameLayout
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_brand_icon"
+            android:padding="9dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:src="@drawable/app_icon" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MLDForwarder"
+                android:textColor="@color/text_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="Telegram Sync"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="MLDForwarder"
-            android:textColor="@color/text_primary"
-            android:textSize="28sp"
+            android:id="@+id/headerRouteCountText"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:background="@drawable/bg_badge"
+            android:gravity="center"
+            android:minWidth="34dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="0"
+            android:textColor="@color/primary_light"
+            android:textSize="12sp"
             android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Sincronização normal e retroativa · Android"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp" />
-
-        <TextView
-            style="@style/SectionTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Conta Telegram" />
-
-        <EditText
-            android:id="@+id/apiIdInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="API ID"
-            android:inputType="number" />
-
-        <EditText
-            android:id="@+id/apiHashInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="API Hash"
-            android:inputType="textNoSuggestions" />
-
-        <EditText
-            android:id="@+id/phoneInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Telefone, por exemplo +55..."
-            android:inputType="phone" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/sendCodeButton"
-                style="@style/PrimaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Enviar código" />
-
-            <Button
-                android:id="@+id/checkSessionButton"
-                style="@style/SecondaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="Verificar sessão" />
-        </LinearLayout>
-
-        <EditText
-            android:id="@+id/codeInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Código recebido"
-            android:inputType="number" />
-
-        <EditText
-            android:id="@+id/passwordInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Senha 2FA, se solicitada"
-            android:inputType="textPassword" />
-
-        <Button
-            android:id="@+id/confirmLoginButton"
-            style="@style/PrimaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Confirmar login" />
-
-        <TextView
-            style="@style/SectionTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Gerenciador de rotas" />
-
-        <TextView
-            android:id="@+id/routeSummaryText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="0 rotas salvas · nova rota"
-            android:textColor="@color/text_secondary"
-            android:textSize="13sp" />
-
-        <EditText
-            android:id="@+id/routeNameInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Nome da rota"
-            android:text="Rota Android" />
-
-        <EditText
-            android:id="@+id/sourceInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="ID ou @username da origem"
-            android:inputType="textNoSuggestions" />
-
-        <Button
-            android:id="@+id/selectSourceButton"
-            style="@style/SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Selecionar origem na lista" />
-
-        <EditText
-            android:id="@+id/sourceTopicInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="ID do tópico de origem (opcional)"
-            android:inputType="number" />
-
-        <Button
-            android:id="@+id/selectSourceTopicButton"
-            style="@style/SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Selecionar tópico de origem" />
-
-        <EditText
-            android:id="@+id/targetInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="ID ou @username do destino"
-            android:inputType="textNoSuggestions" />
-
-        <Button
-            android:id="@+id/selectTargetButton"
-            style="@style/SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Selecionar destino na lista" />
-
-        <EditText
-            android:id="@+id/targetTopicInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="ID do tópico de destino (opcional)"
-            android:inputType="number" />
-
-        <Button
-            android:id="@+id/selectTargetTopicButton"
-            style="@style/SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Selecionar tópico de destino" />
-
-        <TextView
-            style="@style/SectionTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Sincronização" />
-
-        <EditText
-            android:id="@+id/retroLimitInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Limite retroativo"
-            android:inputType="number"
-            android:text="100" />
-
-        <EditText
-            android:id="@+id/retroStartIdInput"
-            style="@style/InputField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="A partir do ID"
-            android:inputType="number"
-            android:text="0" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/newRouteButton"
-                style="@style/SecondaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Nova" />
-
-            <Button
-                android:id="@+id/saveRouteButton"
-                style="@style/PrimaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:text="Salvar" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/selectRouteButton"
-                style="@style/SecondaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Ver rotas" />
-
-            <Button
-                android:id="@+id/deleteRouteButton"
-                style="@style/SecondaryButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:backgroundTint="@color/danger"
-                android:text="Excluir" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/startNormalButton"
-            style="@style/PrimaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Iniciar sincronização normal" />
-
-        <Button
-            android:id="@+id/startRetroButton"
-            style="@style/PrimaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Iniciar sincronização retroativa" />
-
-        <Button
-            android:id="@+id/stopButton"
-            style="@style/SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:backgroundTint="@color/danger"
-            android:text="Parar sincronização" />
-
-        <TextView
-            style="@style/SectionTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Log" />
-
-        <TextView
-            android:id="@+id/logText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/surface"
-            android:fontFamily="monospace"
-            android:minHeight="220dp"
-            android:padding="14dp"
-            android:text="Pronto para configurar."
-            android:textColor="@color/text_secondary"
-            android:textIsSelectable="true"
-            android:textSize="12sp" />
-
     </LinearLayout>
-</ScrollView>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <include
+            android:id="@+id/homePanel"
+            layout="@layout/screen_home" />
+
+        <include
+            android:id="@+id/routesPanel"
+            layout="@layout/screen_routes"
+            android:visibility="gone" />
+
+        <include
+            android:id="@+id/activityPanel"
+            layout="@layout/screen_activity"
+            android:visibility="gone" />
+
+        <include
+            android:id="@+id/accountPanel"
+            layout="@layout/screen_account"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="78dp"
+        android:background="@drawable/bg_bottom_nav"
+        android:baselineAligned="false"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="9dp">
+
+        <LinearLayout
+            android:id="@+id/navHome"
+            style="@style/BottomNavItem"
+            android:background="@drawable/bg_nav_selected">
+
+            <ImageView
+                android:id="@+id/navHomeIcon"
+                style="@style/BottomNavIcon"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_home" />
+
+            <TextView
+                android:id="@+id/navHomeLabel"
+                style="@style/BottomNavLabel"
+                android:text="Início"
+                android:textColor="@color/primary_light" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navRoutes"
+            style="@style/BottomNavItem">
+
+            <ImageView
+                android:id="@+id/navRoutesIcon"
+                style="@style/BottomNavIcon"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_routes" />
+
+            <TextView
+                android:id="@+id/navRoutesLabel"
+                style="@style/BottomNavLabel"
+                android:text="Rotas" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navActivity"
+            style="@style/BottomNavItem">
+
+            <ImageView
+                android:id="@+id/navActivityIcon"
+                style="@style/BottomNavIcon"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_activity" />
+
+            <TextView
+                android:id="@+id/navActivityLabel"
+                style="@style/BottomNavLabel"
+                android:text="Atividade" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/navAccount"
+            style="@style/BottomNavItem">
+
+            <ImageView
+                android:id="@+id/navAccountIcon"
+                style="@style/BottomNavIcon"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_account" />
+
+            <TextView
+                android:id="@+id/navAccountLabel"
+                style="@style/BottomNavLabel"
+                android:text="Conta" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

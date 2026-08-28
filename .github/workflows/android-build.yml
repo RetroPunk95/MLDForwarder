@@ -1,15 +1,12 @@
-name: Android stable build
+name: Android redesign preview
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - android-stable
+      - android-redesign
     paths:
-      - "android/app/**"
-      - "android/build.gradle"
-      - "android/settings.gradle"
-      - "android/gradle.properties"
+      - "android/**"
       - ".github/workflows/android-build.yml"
 
 jobs:
@@ -38,23 +35,14 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Build unsigned release APK
+      - name: Build redesign preview APK
         working-directory: android
-        run: gradle :app:assembleRelease --stacktrace
+        run: gradle :app:assembleDebug --stacktrace
 
-      - name: Collect official APK signing tool
-        shell: bash
-        run: |
-          apksig_jar=$(find "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build/apksig/8.9.2" -name 'apksig-8.9.2.jar' -type f -print -quit)
-          test -n "$apksig_jar"
-          cp "$apksig_jar" android/app/build/outputs/apk/release/apksig.jar
-
-      - name: Upload unsigned release bundle
+      - name: Upload redesign preview
         uses: actions/upload-artifact@v4
         with:
-          name: MLDForwarder-Android-stable-unsigned
-          path: |
-            android/app/build/outputs/apk/release/app-release-unsigned.apk
-            android/app/build/outputs/apk/release/apksig.jar
+          name: MLDForwarder-Android-redesign-preview
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7

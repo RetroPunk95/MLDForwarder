@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true"
+    android:overScrollMode="never">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="16dp" android:paddingTop="6dp" android:paddingEnd="16dp" android:paddingBottom="28dp">
+        <TextView style="@style/SectionTitle" android:layout_marginTop="0dp" android:text="Conta Telegram" />
+        <TextView style="@style/SectionHint" android:text="Conecte sua própria sessão para acessar canais, grupos e tópicos." />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/bg_sync_hero" android:orientation="vertical" android:padding="18dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="STATUS DA SESSÃO" android:textColor="@color/text_muted" android:textSize="10sp" android:textStyle="bold" />
+            <TextView android:id="@+id/accountStatusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="7dp" android:text="Ainda não verificada" android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="Credenciais protegidas pelo armazenamento seguro do Android." android:textColor="@color/text_secondary" android:textSize="12sp" />
+            <Button android:id="@+id/checkSessionButton" style="@style/SecondaryButton" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="12dp" android:text="Verificar sessão" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="16dp">
+            <TextView style="@style/CardTitle" android:text="Credenciais da API" />
+            <TextView style="@style/SectionHint" android:layout_marginTop="4dp" android:text="Use o API ID e API Hash obtidos no portal oficial do Telegram." />
+            <TextView style="@style/FieldLabel" android:text="API ID" />
+            <EditText android:id="@+id/apiIdInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="Ex.: 12345678" android:inputType="number" />
+            <TextView style="@style/FieldLabel" android:text="API HASH" />
+            <EditText android:id="@+id/apiHashInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="Hash da aplicação" android:inputType="text" />
+            <TextView style="@style/FieldLabel" android:text="TELEFONE" />
+            <EditText android:id="@+id/phoneInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="+55..." android:inputType="phone" />
+            <Button android:id="@+id/sendCodeButton" style="@style/PrimaryButton" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="14dp" android:text="Enviar código pelo Telegram" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/bg_card" android:orientation="vertical" android:padding="16dp">
+            <TextView style="@style/CardTitle" android:text="Confirmar acesso" />
+            <TextView style="@style/SectionHint" android:layout_marginTop="4dp" android:text="Digite o código recebido. A senha só é necessária se sua conta usa verificação em duas etapas." />
+            <TextView style="@style/FieldLabel" android:text="CÓDIGO" />
+            <EditText android:id="@+id/codeInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="Código recebido" android:inputType="number" />
+            <TextView style="@style/FieldLabel" android:text="SENHA 2FA · SE NECESSÁRIO" />
+            <EditText android:id="@+id/passwordInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="Senha de duas etapas" />
+            <Button android:id="@+id/confirmLoginButton" style="@style/PrimaryButton" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="14dp" android:text="Confirmar e conectar" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
