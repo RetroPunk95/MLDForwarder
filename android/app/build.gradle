@@ -36,6 +36,7 @@ chaquopy {
     defaultConfig {
         version = '3.11'
         pip {
+            options '--extra-index-url', 'https://www.piwheels.org/simple'
             install 'telethon==1.40.0'
         }
     }
