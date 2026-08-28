@@ -15,15 +15,13 @@
 
         <FrameLayout
             android:layout_width="42dp"
-            android:layout_height="42dp"
-            android:background="@drawable/bg_brand_icon"
-            android:padding="9dp">
+            android:layout_height="42dp">
 
             <ImageView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:contentDescription="@null"
-                android:src="@drawable/app_icon" />
+                android:src="@drawable/mldtools_icon" />
         </FrameLayout>
 
         <LinearLayout
