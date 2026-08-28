@@ -6,7 +6,7 @@
 
 O MLD Tools copia mensagens entre conversas às quais a sua conta tem acesso. O conteúdo chega ao destino como uma nova publicação, sem a assinatura “Encaminhada de”.
 
-A versão 3.0 também incorpora as ferramentas do MLD Fetch em uma **Central de mídia** separada, aberta diretamente pela interface principal.
+A versão 3.0 também incorpora as ferramentas do TDL em uma **Central de mídia** separada, aberta diretamente pela interface principal.
 
 ![Dashboard redesenhado do MLD Tools](docs/images/redesign-dashboard.png)
 
