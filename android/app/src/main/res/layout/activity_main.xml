@@ -26,7 +26,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Prova técnica Android · normal + retroativa"
+            android:text="Sincronização normal e retroativa · Android"
             android:textColor="@color/text_secondary"
             android:textSize="14sp" />
 
@@ -106,18 +106,19 @@
             android:layout_height="wrap_content"
             android:text="Confirmar login" />
 
-        <Button
-            android:id="@+id/listDialogsButton"
-            style="@style/SecondaryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Listar canais e grupos no log" />
-
         <TextView
             style="@style/SectionTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Rota de teste" />
+            android:text="Gerenciador de rotas" />
+
+        <TextView
+            android:id="@+id/routeSummaryText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="0 rotas salvas · nova rota"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
 
         <EditText
             android:id="@+id/routeNameInput"
@@ -135,6 +136,13 @@
             android:hint="ID ou @username da origem"
             android:inputType="textNoSuggestions" />
 
+        <Button
+            android:id="@+id/selectSourceButton"
+            style="@style/SecondaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Selecionar origem na lista" />
+
         <EditText
             android:id="@+id/sourceTopicInput"
             style="@style/InputField"
@@ -144,11 +152,11 @@
             android:inputType="number" />
 
         <Button
-            android:id="@+id/listTopicsButton"
+            android:id="@+id/selectSourceTopicButton"
             style="@style/SecondaryButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Listar tópicos da origem no log" />
+            android:text="Selecionar tópico de origem" />
 
         <EditText
             android:id="@+id/targetInput"
@@ -158,6 +166,13 @@
             android:hint="ID ou @username do destino"
             android:inputType="textNoSuggestions" />
 
+        <Button
+            android:id="@+id/selectTargetButton"
+            style="@style/SecondaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Selecionar destino na lista" />
+
         <EditText
             android:id="@+id/targetTopicInput"
             style="@style/InputField"
@@ -165,6 +180,13 @@
             android:layout_height="wrap_content"
             android:hint="ID do tópico de destino (opcional)"
             android:inputType="number" />
+
+        <Button
+            android:id="@+id/selectTargetTopicButton"
+            style="@style/SecondaryButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Selecionar tópico de destino" />
 
         <TextView
             style="@style/SectionTitle"
@@ -189,6 +211,53 @@
             android:hint="A partir do ID"
             android:inputType="number"
             android:text="0" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/newRouteButton"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Nova" />
+
+            <Button
+                android:id="@+id/saveRouteButton"
+                style="@style/PrimaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:text="Salvar" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/selectRouteButton"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Ver rotas" />
+
+            <Button
+                android:id="@+id/deleteRouteButton"
+                style="@style/SecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/danger"
+                android:text="Excluir" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/startNormalButton"

@@ -1,4 +1,4 @@
-"""Motor Telethon mínimo para a prova técnica do MLDForwarder Android.
+"""Motor Telethon do MLDForwarder Android.
 
 A interface Java chama somente funções que retornam JSON. As sincronizações
 longas recebem um objeto Java com ``onLog(str)`` e usam uma flag em disco para
@@ -203,8 +203,17 @@ def list_dialogs(raw_config):
                 forum = " · fórum" if getattr(entity, "forum", False) else ""
                 dialogs.append((str(dialog.name or dialog.id).strip(), int(dialog.id), kind, forum))
             dialogs.sort(key=lambda item: item[0].casefold())
-            lines = [f"{name} · {kind}{forum}\nID: {peer_id}" for name, peer_id, kind, forum in dialogs]
-            return _result(ok=True, count=len(dialogs), formatted="\n\n".join(lines))
+            items = [
+                {
+                    "name": name,
+                    "id": peer_id,
+                    "kind": kind,
+                    "forum": bool(forum),
+                    "label": f"{name} · {kind}{forum}",
+                }
+                for name, peer_id, kind, forum in dialogs
+            ]
+            return _result(ok=True, count=len(items), items=items)
         finally:
             await client.disconnect()
 
@@ -224,7 +233,7 @@ def list_topics(raw_config, group):
                 return _result(ok=False, error="Conecte a conta antes de listar os tópicos.")
             entity = await client.get_entity(_peer(group))
             if not getattr(entity, "forum", False):
-                return _result(ok=True, count=0, formatted="A origem selecionada não é um grupo com tópicos.")
+                return _result(ok=True, count=0, items=[])
 
             input_entity = await client.get_input_entity(entity)
             topics = []
@@ -263,8 +272,11 @@ def list_topics(raw_config, group):
                     break
 
             topics.sort(key=lambda item: item[0].casefold())
-            lines = [f"{title}\nID do tópico: {topic_id}" for title, topic_id in topics]
-            return _result(ok=True, count=len(topics), formatted="\n\n".join(lines))
+            items = [
+                {"title": title, "id": topic_id, "label": title}
+                for title, topic_id in topics
+            ]
+            return _result(ok=True, count=len(items), items=items)
         finally:
             await client.disconnect()
 
@@ -276,12 +288,21 @@ def list_topics(raw_config, group):
 
 def _route(cfg):
     return {
-        "name": cfg.get("route_name") or "Rota Android",
+        "name": cfg.get("name") or cfg.get("route_name") or "Rota Android",
         "source": _peer(cfg["source"]),
         "source_topic": _topic(cfg.get("source_topic")),
         "target": _peer(cfg["target"]),
         "target_topic": _topic(cfg.get("target_topic")),
+        "retro_limit": max(1, int(cfg.get("retro_limit", 100))),
+        "retro_start_id": max(0, int(cfg.get("retro_start_id", 0))),
     }
+
+
+def _routes(cfg):
+    raw_routes = cfg.get("routes")
+    if isinstance(raw_routes, list) and raw_routes:
+        return [_route(item) for item in raw_routes]
+    return [_route(cfg)]
 
 
 def _route_key(route):
@@ -467,10 +488,10 @@ async def _send_group_with_retry(client, cfg, route, kind, messages, listener):
         try:
             if kind == "album":
                 await _send_album(client, route, messages)
-                _emit(listener, f"✓ Álbum {messages[0].id}-{messages[-1].id}")
+                _emit(listener, f"[{route['name']}] ✓ Álbum {messages[0].id}-{messages[-1].id}")
             else:
                 await _send_message(client, route, messages[0])
-                _emit(listener, f"✓ Mensagem {messages[0].id}")
+                _emit(listener, f"[{route['name']}] ✓ Mensagem {messages[0].id}")
             return True
         except FloodWaitError as error:
             _emit(listener, f"FloodWait: aguardando {error.seconds} segundos.")
@@ -491,45 +512,62 @@ async def _authorized_client(cfg):
 def run_normal(raw_config, listener=None):
     async def task():
         cfg = _config(raw_config)
-        route = _route(cfg)
-        key = _route_key(route)
+        routes = _routes(cfg)
         progress, progress_path = _load_progress(cfg, "normal_progress.json")
         _clear_stop(cfg)
         client = await _authorized_client(cfg)
-        _emit(listener, f"Conectado · {route['name']}")
+        _emit(listener, f"Modo normal conectado · {len(routes)} rota(s).")
         try:
-            if key not in progress:
-                latest = await client.get_messages(
-                    route["source"],
-                    limit=1,
-                    reply_to=route["source_topic"],
-                )
-                progress[key] = latest[0].id if latest else 0
-                _save_progress(progress_path, progress)
-                _emit(listener, f"Primeiro uso: monitorando após o ID {progress[key]}.")
+            active_routes = []
+            for route in routes:
+                try:
+                    key = _route_key(route)
+                    if key not in progress:
+                        latest = await client.get_messages(
+                            route["source"], limit=1, reply_to=route["source_topic"]
+                        )
+                        progress[key] = latest[0].id if latest else 0
+                        _save_progress(progress_path, progress)
+                        _emit(
+                            listener,
+                            f"[{route['name']}] primeiro uso: monitorando após o ID {progress[key]}.",
+                        )
+                    active_routes.append(route)
+                except Exception as error:
+                    _emit(listener, f"[{route['name']}] rota ignorada: {error}")
+            routes = active_routes
+            if not routes:
+                raise RuntimeError("Nenhuma rota pôde ser iniciada.")
 
             while not _stop_requested(cfg):
-                try:
-                    messages = await _collect(
-                        client,
-                        route,
-                        int(progress.get(key, 0)),
-                        int(cfg.get("batch_size", 100)),
-                    )
-                    for kind, group in _groups(messages):
-                        if _stop_requested(cfg):
-                            break
-                        if await _send_group_with_retry(client, cfg, route, kind, group, listener):
-                            progress[key] = group[-1].id
-                            _save_progress(progress_path, progress)
-                    if not messages:
-                        await _sleep(cfg, int(cfg.get("interval", 5)))
-                except FloodWaitError as error:
-                    _emit(listener, f"FloodWait geral: {error.seconds} segundos.")
-                    await _sleep(cfg, error.seconds)
-                except Exception as error:
-                    _emit(listener, f"Erro temporário: {error}")
-                    await _sleep(cfg, 5)
+                found_messages = False
+                for route in routes:
+                    if _stop_requested(cfg):
+                        break
+                    key = _route_key(route)
+                    try:
+                        messages = await _collect(
+                            client,
+                            route,
+                            int(progress.get(key, 0)),
+                            int(cfg.get("batch_size", 100)),
+                        )
+                        found_messages = found_messages or bool(messages)
+                        for kind, group in _groups(messages):
+                            if _stop_requested(cfg):
+                                break
+                            if await _send_group_with_retry(
+                                client, cfg, route, kind, group, listener
+                            ):
+                                progress[key] = group[-1].id
+                                _save_progress(progress_path, progress)
+                    except FloodWaitError as error:
+                        _emit(listener, f"FloodWait geral: {error.seconds} segundos.")
+                        await _sleep(cfg, error.seconds)
+                    except Exception as error:
+                        _emit(listener, f"[{route['name']}] erro temporário: {error}")
+                if not found_messages:
+                    await _sleep(cfg, int(cfg.get("interval", 5)))
         finally:
             await client.disconnect()
             _emit(listener, "Conta desconectada do motor normal.")
@@ -545,26 +583,38 @@ def run_normal(raw_config, listener=None):
 def run_retro(raw_config, listener=None):
     async def task():
         cfg = _config(raw_config)
-        route = _route(cfg)
-        key = _route_key(route)
+        routes = _routes(cfg)
         progress, progress_path = _load_progress(cfg, "retro_progress.json")
-        start_id = max(int(cfg.get("retro_start_id", 0)), int(progress.get(key, 0)))
-        limit = max(1, int(cfg.get("retro_limit", 100)))
         _clear_stop(cfg)
         client = await _authorized_client(cfg)
-        _emit(listener, f"Retroativa conectada · {route['name']} · após ID {start_id}")
+        _emit(listener, f"Modo retroativo conectado · {len(routes)} rota(s).")
         try:
-            messages = await _collect(client, route, start_id, limit)
-            if not messages:
-                _emit(listener, "Nenhuma mensagem encontrada para esse intervalo.")
-                return
-            _emit(listener, f"{len(messages)} mensagem(ns) carregada(s).")
-            for kind, group in _groups(messages):
+            for route in routes:
                 if _stop_requested(cfg):
                     break
-                if await _send_group_with_retry(client, cfg, route, kind, group, listener):
-                    progress[key] = group[-1].id
-                    _save_progress(progress_path, progress)
+                try:
+                    key = _route_key(route)
+                    start_id = max(
+                        route["retro_start_id"], int(progress.get(key, 0))
+                    )
+                    _emit(listener, f"[{route['name']}] carregando após o ID {start_id}.")
+                    messages = await _collect(
+                        client, route, start_id, route["retro_limit"]
+                    )
+                    if not messages:
+                        _emit(listener, f"[{route['name']}] nenhuma mensagem encontrada.")
+                        continue
+                    _emit(listener, f"[{route['name']}] {len(messages)} mensagem(ns) carregada(s).")
+                    for kind, group in _groups(messages):
+                        if _stop_requested(cfg):
+                            break
+                        if await _send_group_with_retry(
+                            client, cfg, route, kind, group, listener
+                        ):
+                            progress[key] = group[-1].id
+                            _save_progress(progress_path, progress)
+                except Exception as error:
+                    _emit(listener, f"[{route['name']}] erro: {error}")
         finally:
             await client.disconnect()
             _emit(listener, "Conta desconectada do motor retroativo.")

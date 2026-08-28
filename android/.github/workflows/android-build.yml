@@ -7,10 +7,10 @@ on:
       - android-alpha
       - android-v1
     paths:
-      - "android/app/**"
-      - "android/build.gradle"
-      - "android/settings.gradle"
-      - "android/gradle.properties"
+      - "app/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
       - ".github/workflows/android-build.yml"
 
 jobs:
@@ -40,13 +40,12 @@ jobs:
           gradle-version: "8.11.1"
 
       - name: Build debug APK
-        working-directory: android
         run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: MLDForwarder-Android-v1-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
