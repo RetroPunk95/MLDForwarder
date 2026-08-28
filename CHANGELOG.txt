@@ -1,5 +1,84 @@
-MLDForwarder — Histórico de versões
+MLD Tools — Histórico de versões
 ===================================
+
+Correção do pacote v3.0.0
+-------------------------
+- Reorganiza cards, campos, opções e ações em tempo real ao redimensionar.
+- Exibe rolagem vertical automática quando uma página não cabe na janela.
+- Ajusta textos à largura disponível e mantém sidebar e cabeçalho fixos.
+- Memoriza tamanho, posição e estado maximizado das duas janelas.
+- Abre a Central de mídia com altura inicial suficiente para as configurações.
+- Corrige a abertura do portátil com os novos painéis CustomTkinter.
+- Redesign completo do painel principal e da Central de mídia.
+- Nova paleta navy, azul elétrico e violeta derivada do ícone oficial.
+- Sidebar com ícone, navegação por marcador lateral e cabeçalhos contextuais.
+- Cards, badges e estados visuais unificados em um sistema de tema compartilhado.
+- Migração das superfícies, navegação e ações para CustomTkinter.
+- Cantos arredondados reais, botões maiores e tipografia mais legível.
+- Inclusão automática dos recursos visuais nos dois executáveis de interface.
+- Restaura a lista automática de canais e grupos na criação e edição de rotas.
+- Exibe nome, tipo e ID; permite atualizar a consulta e mantém a entrada manual.
+- Unifica downloads e uploads na mesma fila persistente.
+- Uploads só começam depois do comando Iniciar fila.
+- Adiciona pausa, cancelamento e nova tentativa também aos uploads.
+- Registra uploads na atividade recente e no histórico persistente.
+- Adiciona perfis Equilibrado, Rápido e Agressivo para downloads e uploads via tdl.
+- Explica no Guia do Usuário a indicação e os riscos de cada perfil.
+- Acelera álbuns com cryptg e pré-upload paralelo de até quatro arquivos.
+- Acelera o modo Baixar e reenviar com quatro partes simultâneas de 512 KB.
+- Mantém o mesmo limite global nos álbuns, sem alterar sua ordem ou retomada.
+- Inclui cryptg também nos motores compilados normal e retroativo.
+- Corrige o botão Cancelar para interromper efetivamente uploads em andamento.
+- Encerra a árvore do processo como segurança e limpa a tarefa temporária.
+- Adiciona a opção Manter nome original aos downloads.
+- Permite salvar essa preferência nas configurações da Central de mídia.
+- Corrige a identificação de usuários, grupos e canais no upload em álbuns.
+- Atualiza o cache de conversas antes de repetir a resolução do destino.
+- Corrige caracteres acentuados nos logs do uploader no Windows.
+
+3.0.0 / MLD Tools
+-----------------
+- Nova marca MLD Tools — Telegram Media Suite.
+- Central de mídia integrada com downloads, exportação e uploads.
+- Downloads entram na fila e aguardam o comando manual para iniciar.
+- Upload de arquivos e pastas para canal, grupo, conversa ou tópico.
+- Nova opção para enviar como álbum, agrupando por seleção ou pasta.
+- Álbuns grandes são divididos automaticamente e ordenados naturalmente.
+- Mantém dados e configurações das versões anteriores.
+- Remove somente executáveis e atalhos antigos durante a atualização da v2.x.
+
+2.10.1 / Seleção de rotas no modo normal
+
+- Permite iniciar uma, várias ou todas as rotas pelo Dashboard.
+- Mantém todas selecionadas por padrão para preservar o comportamento anterior.
+- Exibe a quantidade de rotas ativas durante a execução.
+- Mantém progresso independente e rejeita rotas desconhecidas.
+- Preserva download/reupload e armazenamento temporário da versão 2.10.0.
+
+2.10.0 / Controle de armazenamento temporário
+
+- Permite escolher a pasta-pai dos temporários pela interface.
+- Administra somente a subpasta marcada temp_transferencias.
+- Exibe espaço livre, uso atual e limite configurado.
+- Adiciona limite temporário em GB; 0 usa apenas o espaço real do disco.
+- Valida o tamanho conhecido do álbum inteiro antes do primeiro download.
+- Considera arquivos completos e parciais retidos no limite configurado.
+- Adiciona limpeza confirmada, disponível apenas com os motores parados.
+- Mantém compatibilidade com temporários da versão 2.9.0.
+
+2.9.0 / Download e reenvio local
+
+- Adiciona a opção "Baixar e reenviar arquivos" por rota.
+- Funciona no modo normal, retroativo e nas retentativas.
+- Retoma downloads parciais salvos com extensão .part.
+- Reutiliza o arquivo completo quando o upload falha.
+- Valida espaço livre antes de iniciar o download.
+- Avisa antes do download quando um arquivo acima de 2 GB exige Premium.
+- Preserva nome, tipo, atributos, legenda e formatação compatível.
+- Mantém álbuns agrupados e os metadados disponíveis de cada arquivo.
+- Apaga o temporário somente após a confirmação do envio.
+- Mantém rotas antigas no modo direto por padrão.
+- Adiciona a coluna "Transferência" à lista de rotas.
 
 2.8.1 / Hotfix de compatibilidade
 
@@ -46,7 +125,7 @@ MLDForwarder — Histórico de versões
 
 2.5.0 / Release Kit v1.5
 
-- Renomeia o programa de TGForwarder para MLDForwarder.
+- Renomeia o programa de TGForwarder para MLD Tools.
 - Atualiza o nome da interface, executáveis, instalador e pacotes portáteis.
 - Adiciona um link clicável para https://my.telegram.org/ na área da API.
 - Mantém os nomes e formatos dos arquivos de configuração e progresso.

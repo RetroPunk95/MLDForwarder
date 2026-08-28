@@ -1,0 +1,16 @@
+.env
+*.session
+*.session-journal
+app_config.json
+channels.json
+historico_progress.json
+normal_config.json
+retro_config.json
+sync_progress.json
+temp_transferencias/
+data/
+__pycache__/
+tests/__pycache__/
+build_exe/
+release/
+engine/tdl.exe

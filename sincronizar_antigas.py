@@ -43,6 +43,12 @@ from config_utils import (
     salvar_json,
     resolver_session_path,
 )
+from media_transfer import (
+    configurar_armazenamento_temporario,
+    enviar_album_baixado,
+    enviar_mensagem_baixada,
+    tem_midia_baixavel,
+)
 
 
 # ============================================================
@@ -63,6 +69,7 @@ API_ID = int(API_ID)
 
 CHANNELS = carregar_canais()
 CONFIG_APP = carregar_config_app()
+configurar_armazenamento_temporario(CONFIG_APP)
 
 SESSION_FILE = str(resolver_session_path(CONFIG_APP["session_file"]))
 
@@ -418,7 +425,9 @@ async def enviar_mensagem(
     client,
     destino,
     mensagem,
-    topico_destino_id=None
+    topico_destino_id=None,
+    baixar_reenviar=False,
+    chave_rota=None
 ):
 
     if isinstance(
@@ -438,6 +447,20 @@ async def enviar_mensagem(
         return
 
     if mensagem.media:
+
+        if (
+            baixar_reenviar
+            and tem_midia_baixavel(mensagem)
+        ):
+            await enviar_mensagem_baixada(
+                client,
+                destino,
+                mensagem,
+                chave_rota,
+                topico_destino_id,
+                verificar_parada
+            )
+            return
 
         try:
 
@@ -491,8 +514,21 @@ async def enviar_album(
     client,
     destino,
     mensagens,
-    topico_destino_id=None
+    topico_destino_id=None,
+    baixar_reenviar=False,
+    chave_rota=None
 ):
+
+    if baixar_reenviar:
+        await enviar_album_baixado(
+            client,
+            destino,
+            mensagens,
+            chave_rota,
+            topico_destino_id,
+            verificar_parada
+        )
+        return
 
     arquivos = []
     legendas = []
@@ -535,7 +571,9 @@ async def enviar_album(
             client,
             destino,
             mensagens_com_midia[0],
-            topico_destino_id
+            topico_destino_id,
+            baixar_reenviar,
+            chave_rota
         )
 
         return
@@ -666,6 +704,7 @@ async def processar_lote(
     chave_rota,
     destino,
     topico_destino_id,
+    baixar_reenviar,
     mensagens,
     progresso,
     processadas,
@@ -724,7 +763,9 @@ async def processar_lote(
                     client,
                     destino,
                     album,
-                    topico_destino_id
+                    topico_destino_id,
+                    baixar_reenviar,
+                    chave_rota
                 )
 
                 atualizar_last_id(
@@ -797,7 +838,9 @@ async def processar_lote(
                 client,
                 destino,
                 mensagem,
-                topico_destino_id
+                topico_destino_id,
+                baixar_reenviar,
+                chave_rota
             )
 
             atualizar_last_id(
@@ -872,6 +915,7 @@ async def importar_historico(
     topico_id,
     destino,
     topico_destino_id,
+    baixar_reenviar,
     nome,
     progresso
 ):
@@ -890,6 +934,14 @@ async def importar_historico(
     print(f"Destino: {destino}")
     if topico_destino_id is not None:
         print(f"Tópico de destino: {topico_destino_id}")
+    print(
+        "Transferência: "
+        + (
+            "baixar e reenviar"
+            if baixar_reenviar
+            else "cópia direta"
+        )
+    )
 
     dados = obter_canal_progress(
         progresso,
@@ -976,6 +1028,7 @@ async def importar_historico(
             chave_rota,
             destino,
             topico_destino_id,
+            baixar_reenviar,
             mensagens,
             progresso,
             processadas,
@@ -1023,6 +1076,7 @@ async def tentar_falhas(
     origem,
     destino,
     topico_destino_id,
+    baixar_reenviar,
     progresso
 ):
 
@@ -1114,7 +1168,9 @@ async def tentar_falhas(
                 client,
                 destino,
                 mensagens,
-                topico_destino_id
+                topico_destino_id,
+                baixar_reenviar,
+                chave_rota
             )
 
             for mensagem in mensagens:
@@ -1181,7 +1237,9 @@ async def tentar_falhas(
                 client,
                 destino,
                 mensagem,
-                topico_destino_id
+                topico_destino_id,
+                baixar_reenviar,
+                chave_rota
             )
 
             remover_falha(
@@ -1379,6 +1437,7 @@ async def main():
                 dados.get("topic_id"),
                 dados["target_id"],
                 dados.get("target_topic_id"),
+                dados.get("download_reupload", False),
                 dados["name"],
                 progresso
             )
@@ -1389,6 +1448,7 @@ async def main():
                 dados["source_id"],
                 dados["target_id"],
                 dados.get("target_topic_id"),
+                dados.get("download_reupload", False),
                 progresso
             )
 

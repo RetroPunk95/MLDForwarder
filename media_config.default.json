@@ -1,0 +1,23 @@
+{
+  "default_download_dir": "",
+  "workspace_dir": "data/tasks",
+  "namespace": "default",
+  "threads_per_file": 8,
+  "parallel_downloads": 4,
+  "dc_pool": 8,
+  "delay_seconds": 0,
+  "reconnect_timeout": "2m",
+  "proxy": "",
+  "skip_same": true,
+  "group_albums": true,
+  "keep_original_filename": false,
+  "takeout": false,
+  "descending": false,
+  "rewrite_extension": false,
+  "include_extensions": "",
+  "exclude_extensions": "",
+  "filename_template": "",
+  "confirm_full_chat": true,
+  "window_geometry": "",
+  "window_maximized": false
+}

@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -34,7 +35,11 @@ DEFAULT_RETRO_CONFIG = {
 }
 
 DEFAULT_APP_CONFIG = {
-    "session_file": "user_session"
+    "session_file": "user_session",
+    "temp_parent_dir": "",
+    "limite_temporario_gb": 0,
+    "window_geometry": "",
+    "window_maximized": False,
 }
 
 
@@ -116,6 +121,31 @@ def normalizar_topico(valor):
     return topico_id
 
 
+def normalizar_booleano(valor, padrao=False):
+    """Normaliza opções booleanas vindas do JSON ou de edição manual."""
+
+    if valor is None:
+        return bool(padrao)
+
+    if isinstance(valor, bool):
+        return valor
+
+    if isinstance(valor, (int, float)):
+        return bool(valor)
+
+    texto = str(valor).strip().lower()
+
+    if texto in {"1", "true", "sim", "yes", "on"}:
+        return True
+
+    if texto in {"0", "false", "nao", "não", "no", "off", ""}:
+        return False
+
+    raise ValueError(
+        f"Valor booleano inválido: {valor}."
+    )
+
+
 def montar_chave_rota(origem, topico_id=None):
     """
     Gera uma chave única para o progresso e para channels.json.
@@ -191,6 +221,9 @@ def carregar_canais():
         topico_destino_id = normalizar_topico(
             configuracao.get("target_topic_id")
         )
+        download_reupload = normalizar_booleano(
+            configuracao.get("download_reupload", False)
+        )
 
         nome = str(
             configuracao.get("name", origem_normalizada)
@@ -211,10 +244,45 @@ def carregar_canais():
             "target_id": destino_normalizado,
             "topic_id": topico_id,
             "target_topic_id": topico_destino_id,
+            "download_reupload": download_reupload,
             "name": nome or chave_rota
         }
 
     return canais
+
+
+def selecionar_rotas(canais, chaves_selecionadas=None):
+    """
+    Filtra rotas mantendo a ordem de channels.json.
+
+    None ou uma lista vazia preserva o comportamento histórico e seleciona
+    todas as rotas. Chaves desconhecidas causam erro em vez de iniciar uma
+    execução diferente da solicitada.
+    """
+    if not chaves_selecionadas:
+        return dict(canais)
+
+    chaves = {
+        str(chave)
+        for chave in chaves_selecionadas
+    }
+    desconhecidas = sorted(
+        chave
+        for chave in chaves
+        if chave not in canais
+    )
+
+    if desconhecidas:
+        raise RuntimeError(
+            "Rota(s) não encontrada(s): "
+            + ", ".join(desconhecidas)
+        )
+
+    return {
+        chave: dados
+        for chave, dados in canais.items()
+        if chave in chaves
+    }
 
 
 def carregar_config_normal():
@@ -272,7 +340,66 @@ def carregar_config_app():
         session_file or "user_session"
     )
 
+    config["temp_parent_dir"] = str(
+        config.get("temp_parent_dir", "")
+    ).strip()
+
+    config["window_geometry"] = str(
+        config.get("window_geometry", "")
+    ).strip()
+
+    config["window_maximized"] = normalizar_booleano(
+        config.get("window_maximized", False)
+    )
+
+    try:
+        limite_temporario_gb = float(
+            config.get("limite_temporario_gb", 0)
+        )
+    except (TypeError, ValueError) as erro:
+        raise RuntimeError(
+            "limite_temporario_gb precisa ser um número."
+        ) from erro
+
+    if (
+        not math.isfinite(limite_temporario_gb)
+        or limite_temporario_gb < 0
+    ):
+        raise RuntimeError(
+            "limite_temporario_gb precisa ser zero ou um número positivo."
+        )
+
+    config["limite_temporario_gb"] = limite_temporario_gb
+
     return config
+
+
+def resolver_temp_parent_dir(temp_parent_dir=""):
+    """
+    Resolve a pasta escolhida pelo usuário sem conceder ao programa
+    propriedade sobre o conteúdo dela. Os arquivos administrados ficam
+    exclusivamente na subpasta ``temp_transferencias``.
+    """
+    texto = str(temp_parent_dir or "").strip()
+
+    if not texto:
+        return BASE_DIR.resolve()
+
+    caminho = Path(
+        os.path.expandvars(texto)
+    ).expanduser()
+
+    if not caminho.is_absolute():
+        caminho = BASE_DIR / caminho
+
+    return caminho.resolve()
+
+
+def resolver_temp_media_dir(temp_parent_dir=""):
+    return (
+        resolver_temp_parent_dir(temp_parent_dir)
+        / "temp_transferencias"
+    )
 
 
 def ler_env():

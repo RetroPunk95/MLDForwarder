@@ -1,21 +1,30 @@
-MLDForwarder — Release Kit v1.9.1
+MLD Tools — Release Kit 3.0.0
 ================================
 
 OBJETIVO
 
-Gerar uma versão portátil do MLDForwarder que não exige Python
+Gerar uma versão portátil do MLD Tools que não exige Python
 na máquina do usuário final.
 
 ARQUITETURA DO RELEASE
 
-MLDForwarder.exe
+MLDTools.exe
     GUI sem janela de console.
 
-MLDForwarderSync.exe
+MLDToolsSync.exe
     Helper do modo normal.
 
-MLDForwarderRetro.exe
+MLDToolsRetro.exe
     Helper do modo retroativo.
+
+MLDToolsMedia.exe
+    Central de downloads, exportações, uploads, fila e histórico.
+
+MLDToolsAlbum.exe
+    Helper do upload agrupado em álbuns.
+
+engine\tdl.exe
+    Motor de downloads, exportações e uploads comuns.
 
 Os helpers continuam separados para preservar a arquitetura
 que já foi validada no projeto.
@@ -29,35 +38,38 @@ REQUISITO DO COMPUTADOR DE BUILD:
 PASSOS:
 
 1. Extraia este kit em uma pasta.
-2. Se você está atualizando o seu projeto atual, pode copiar para
+2. Se engine\tdl.exe não estiver presente, execute:
+      download_tdl.bat
+   O script baixa a versão oficial e valida o checksum antes de instalar.
+3. Se você está atualizando o seu projeto atual, pode copiar para
    cá seus JSONs/.env/session antes do teste.
-3. Execute:
+4. Execute:
       build_exe.bat
-4. Aguarde a compilação.
-5. O resultado ficará em:
-      release\MLDForwarder_Portable
-6. Também será criado:
-      release\MLDForwarder_Portable.zip
+5. Aguarde a compilação.
+6. O resultado ficará em:
+      release\MLDTools_Portable
+7. Também será criado:
+      release\MLDTools_Portable.zip
 
 TESTE COM SUA CONFIGURAÇÃO ATUAL
 
 Depois do build:
 
 1. Abra a pasta:
-      release\MLDForwarder_Portable
+      release\MLDTools_Portable
 2. Copie manualmente para ela somente os arquivos locais necessários
    ao seu teste, como .env, configuração e sessão.
 3. Abra:
-      release\MLDForwarder_Portable\MLDForwarder.exe
+      release\MLDTools_Portable\MLDTools.exe
 
 ATENÇÃO:
-Depois que dados locais forem copiados para MLDForwarder_Portable,
+Depois que dados locais forem copiados para MLDTools_Portable,
 essa pasta deixa de ser um pacote público limpo. NÃO a compartilhe.
 Execute build_exe.bat novamente antes de gerar uma distribuição pública.
 
 PACOTE PARA DISTRIBUIÇÃO
 
-MLDForwarder_Portable é criado limpo:
+MLDTools_Portable é criado limpo:
 - sem .env real
 - sem sessão
 - sem progresso
@@ -65,20 +77,28 @@ MLDForwarder_Portable é criado limpo:
 
 Assim ele pode ser entregue a outro usuário.
 
-ÍCONE OPCIONAL
+RECURSOS VISUAIS OBRIGATÓRIOS
 
-Se você colocar um arquivo:
-    icon.ico
+Mantenha estes itens na pasta do projeto:
+    Icon.ico
+    assets\app_icon_64.png
 
-na mesma pasta do build_exe.bat antes de compilar, ele será
-aplicado ao MLDForwarder.exe.
+O build aplica o ícone aos executáveis e inclui os dois recursos dentro das
+interfaces one-file. Se algum deles estiver ausente, o build é interrompido
+antes da compilação.
+
+O visual moderno usa CustomTkinter. O build instala automaticamente a versão
+fixada em requirements.txt e inclui seus temas e fontes internas nos dois
+executáveis de interface; não é necessário copiar essa biblioteca à mão.
 
 O QUE FOI ADAPTADO PARA O EXE
 
 - Caminhos persistentes usam a pasta do executável.
 - A GUI detecta quando está congelada pelo PyInstaller.
-- No modo congelado, a GUI chama MLDForwarderSync.exe e
-  MLDForwarderRetro.exe.
+- No modo congelado, a GUI chama MLDToolsSync.exe e
+  MLDToolsRetro.exe e abre MLDToolsMedia.exe quando necessário.
+- A Central de mídia chama MLDToolsAlbum.exe para álbuns e engine\tdl.exe
+  para as demais operações.
 - No modo Python, a mesma GUI continua chamando os scripts .py.
 - Os helpers têm saída line-buffered para o log continuar em tempo real.
 - Os helpers são iniciados no Windows sem abrir janelas de console.
@@ -96,7 +116,7 @@ abre o portal oficial no navegador padrão. O endereço usado é:
 
 ROTAS COM TÓPICOS
 
-A versão 2.8.1 aceita canais, grupos e tópicos tanto na origem quanto no destino:
+A versão 3.0.0 aceita canais, grupos e tópicos tanto na origem quanto no destino:
 - canal ou grupo inteiro
 - tópico específico dentro de um grupo com fórum
 
@@ -113,10 +133,29 @@ Vários tópicos do mesmo grupo podem ser cadastrados ao mesmo tempo.
 Cada rota possui progresso normal e retroativo independentes.
 
 
+DOWNLOAD E REENVIO LOCAL
+
+Cada rota pode salvar download_reupload=true em channels.json. Quando essa
+opção está ativa, os dois helpers usam media_transfer.py para baixar a mídia,
+reenviar o arquivo e limpar o temporário após a confirmação.
+
+O fluxo usa partes de 512 KB e mantém até quatro requisições em voo. Em
+álbuns, o limite é compartilhado entre os arquivos e a ordem final é
+preservada. O build inclui explicitamente cryptg nos helpers normal e
+retroativo para acelerar a criptografia do Telethon.
+
+O módulo é importado automaticamente pelo PyInstaller. Por padrão, a pasta
+temp_transferencias é criada em tempo de execução ao lado dos executáveis.
+O usuário também pode escolher outra pasta-pai e definir um limite de uso em
+GB. O programa administra somente a subpasta temp_transferencias, valida o
+tamanho completo de álbuns antes do primeiro download e não inclui temporários
+no pacote público.
+
+
 PROTEÇÃO DO PACOTE PÚBLICO
 
 O build_exe.bat NÃO copia channels.json, .env, sessão ou progresso
-da sua pasta de trabalho para MLDForwarder_Portable.
+da sua pasta de trabalho para MLDTools_Portable.
 
 O release público usa:
 - channels.default.json
@@ -133,10 +172,12 @@ INSTALLER WINDOWS
 
 Depois de validar os executáveis, este kit também pode gerar:
 
-    MLDForwarder_Setup_v2.8.1.exe
+    MLDTools_Setup_v3.0.0.exe
 
 O instalador:
-- instala por usuário em %LOCALAPPDATA%\MLDForwarder
+- instala por usuário em %LOCALAPPDATA%\MLDTools
+- é reconhecido como atualização do MLDForwarder pelo mesmo AppId
+- reutiliza o diretório anterior e remove somente executáveis/atalhos antigos
 - não exige privilégios de administrador
 - cria atalho no Menu Iniciar
 - pode criar atalho opcional na Área de Trabalho

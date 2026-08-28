@@ -251,6 +251,124 @@ async def sair_da_conta(
             await client.disconnect()
 
 
+async def listar_canais_grupos(
+    api_id,
+    api_hash,
+    session_file
+):
+    """
+    Lista os canais e grupos visíveis para a sessão autenticada.
+
+    ``Dialog.id`` já usa o formato de peer aceito pelo Telethon, inclusive
+    o prefixo ``-100`` de canais e supergrupos. Conversas privadas são
+    ignoradas porque não são destinos válidos para as rotas do MLD Tools.
+    """
+    client = TelegramClient(
+        _session_path(session_file),
+        int(api_id),
+        api_hash
+    )
+
+    await client.connect()
+
+    try:
+        if not await client.is_user_authorized():
+            return {
+                "ok": False,
+                "error": (
+                    "A sessão do Telegram não está autenticada. "
+                    "Entre na aba Telegram e conecte sua conta."
+                )
+            }
+
+        dialogos = []
+        ids_vistos = set()
+
+        async for dialogo in client.iter_dialogs(
+            ignore_migrated=True
+        ):
+            if not (
+                getattr(dialogo, "is_channel", False)
+                or getattr(dialogo, "is_group", False)
+            ):
+                continue
+
+            entidade = getattr(dialogo, "entity", None)
+
+            if (
+                getattr(entidade, "left", False)
+                or getattr(entidade, "deactivated", False)
+            ):
+                continue
+
+            peer_id = getattr(dialogo, "id", None)
+
+            if peer_id is None:
+                continue
+
+            peer_id = int(peer_id)
+
+            if peer_id in ids_vistos:
+                continue
+
+            ids_vistos.add(peer_id)
+
+            titulo = (
+                getattr(dialogo, "name", None)
+                or getattr(entidade, "title", None)
+                or str(peer_id)
+            )
+            titulo = " ".join(str(titulo).split())
+
+            username = getattr(entidade, "username", None)
+
+            if getattr(dialogo, "is_group", False):
+                tipo = "Grupo"
+            else:
+                tipo = "Canal"
+
+            dialogos.append(
+                {
+                    "id": peer_id,
+                    "title": titulo,
+                    "type": tipo,
+                    "username": (
+                        f"@{str(username).lstrip('@')}"
+                        if username
+                        else ""
+                    ),
+                    "is_forum": bool(
+                        getattr(entidade, "forum", False)
+                    )
+                }
+            )
+
+        dialogos.sort(
+            key=lambda item: (
+                item["title"].casefold(),
+                item["id"]
+            )
+        )
+
+        return {
+            "ok": True,
+            "dialogs": dialogos
+        }
+
+    except Exception as erro:
+        return {
+            "ok": False,
+            "error": (
+                "Não foi possível carregar os canais e grupos: "
+                f"{erro}"
+            )
+        }
+
+    finally:
+        if client.is_connected():
+            await client.disconnect()
+
+
 async def listar_topicos(
     api_id,
     api_hash,

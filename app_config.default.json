@@ -1,3 +1,7 @@
 {
-    "session_file": "user_session"
+    "session_file": "user_session",
+    "temp_parent_dir": "",
+    "limite_temporario_gb": 0,
+    "window_geometry": "",
+    "window_maximized": false
 }

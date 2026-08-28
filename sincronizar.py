@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import sys
 import os
@@ -40,6 +41,14 @@ from config_utils import (
     carregar_json,
     salvar_json,
     resolver_session_path,
+    selecionar_rotas,
+)
+from media_transfer import (
+    TransferenciaInterrompida,
+    configurar_armazenamento_temporario,
+    enviar_album_baixado,
+    enviar_mensagem_baixada,
+    tem_midia_baixavel,
 )
 
 
@@ -63,11 +72,36 @@ CHANNELS = carregar_canais()
 
 CONFIG_NORMAL = carregar_config_normal()
 CONFIG_APP = carregar_config_app()
+configurar_armazenamento_temporario(CONFIG_APP)
 
 TAMANHO_LOTE = CONFIG_NORMAL["tamanho_lote"]
 INTERVALO = CONFIG_NORMAL["intervalo"]
 
 SESSION_FILE = str(resolver_session_path(CONFIG_APP["session_file"]))
+
+
+# ============================================================
+# ARGUMENTOS
+# ============================================================
+
+def carregar_argumentos(argumentos=None):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Sincronização contínua de mensagens novas."
+        )
+    )
+
+    parser.add_argument(
+        "--canal",
+        dest="canais",
+        action="append",
+        help=(
+            "Chave de uma rota a sincronizar. Pode ser repetido para "
+            "iniciar várias rotas. Se omitido, inicia todas."
+        )
+    )
+
+    return parser.parse_args(argumentos)
 
 
 # ============================================================
@@ -153,6 +187,12 @@ def limpar_pedido_parada():
         SYNC_STOP_FILE.unlink()
     except FileNotFoundError:
         pass
+
+
+def verificar_parada_transferencia():
+
+    if parada_solicitada():
+        raise TransferenciaInterrompida
 
 
 async def esperar_com_parada(segundos):
@@ -301,7 +341,9 @@ async def enviar_mensagem(
     client,
     destino,
     mensagem,
-    topico_destino_id=None
+    topico_destino_id=None,
+    baixar_reenviar=False,
+    chave_rota=None
 ):
 
     if isinstance(
@@ -321,6 +363,20 @@ async def enviar_mensagem(
         return
 
     if mensagem.media:
+
+        if (
+            baixar_reenviar
+            and tem_midia_baixavel(mensagem)
+        ):
+            await enviar_mensagem_baixada(
+                client,
+                destino,
+                mensagem,
+                chave_rota,
+                topico_destino_id,
+                verificar_parada_transferencia
+            )
+            return
 
         try:
 
@@ -374,8 +430,21 @@ async def enviar_album(
     client,
     destino,
     mensagens,
-    topico_destino_id=None
+    topico_destino_id=None,
+    baixar_reenviar=False,
+    chave_rota=None
 ):
+
+    if baixar_reenviar:
+        await enviar_album_baixado(
+            client,
+            destino,
+            mensagens,
+            chave_rota,
+            topico_destino_id,
+            verificar_parada_transferencia
+        )
+        return
 
     arquivos = []
     legendas = []
@@ -418,7 +487,9 @@ async def enviar_album(
             client,
             destino,
             mensagens_com_midia[0],
-            topico_destino_id
+            topico_destino_id,
+            baixar_reenviar,
+            chave_rota
         )
 
         return
@@ -596,6 +667,7 @@ async def processar_mensagens(
     chave_rota,
     destino,
     topico_destino_id,
+    baixar_reenviar,
     mensagens,
     progresso
 ):
@@ -622,7 +694,9 @@ async def processar_mensagens(
                     client,
                     destino,
                     grupo_mensagens,
-                    topico_destino_id
+                    topico_destino_id,
+                    baixar_reenviar,
+                    chave_rota
                 )
 
                 print(
@@ -651,7 +725,9 @@ async def processar_mensagens(
                     client,
                     destino,
                     mensagem,
-                    topico_destino_id
+                    topico_destino_id,
+                    baixar_reenviar,
+                    chave_rota
                 )
 
                 print(
@@ -663,6 +739,15 @@ async def processar_mensagens(
                 chave_rota,
                 ultimo_id
             )
+
+        except TransferenciaInterrompida:
+
+            print(
+                "  Transferência interrompida. O temporário será "
+                "reutilizado na próxima execução."
+            )
+
+            return False
 
         except FloodWaitError as error:
 
@@ -709,6 +794,7 @@ async def sincronizar_canal(
     topico_id,
     destino,
     topico_destino_id,
+    baixar_reenviar,
     nome,
     progresso
 ):
@@ -751,6 +837,7 @@ async def sincronizar_canal(
         chave_rota,
         destino,
         topico_destino_id,
+        baixar_reenviar,
         mensagens,
         progresso
     )
@@ -768,11 +855,18 @@ async def main():
     print("=" * 60)
     print()
 
+    argumentos = carregar_argumentos()
+
     if not CHANNELS:
 
         raise RuntimeError(
             "Nenhuma rota configurada em channels.json."
         )
+
+    canais_ativos = selecionar_rotas(
+        CHANNELS,
+        argumentos.canais
+    )
 
     if TAMANHO_LOTE <= 0:
 
@@ -806,13 +900,33 @@ async def main():
         f"Rotas configuradas: {len(CHANNELS)}"
     )
 
+    print(
+        f"Rotas ativas nesta execução: {len(canais_ativos)}"
+    )
+
+    for dados in canais_ativos.values():
+        print(
+            f"  • {dados['name']}"
+        )
+
+    rotas_reupload = sum(
+        1
+        for dados in canais_ativos.values()
+        if dados.get("download_reupload", False)
+    )
+
+    if rotas_reupload:
+        print(
+            f"Rotas com download e reenvio: {rotas_reupload}"
+        )
+
     print()
 
     try:
 
         while not parada_solicitada():
 
-            for chave_rota, dados in CHANNELS.items():
+            for chave_rota, dados in canais_ativos.items():
 
                 if parada_solicitada():
                     break
@@ -824,6 +938,7 @@ async def main():
                     dados.get("topic_id"),
                     dados["target_id"],
                     dados.get("target_topic_id"),
+                    dados.get("download_reupload", False),
                     dados["name"],
                     progresso
                 )

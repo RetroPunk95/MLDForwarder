@@ -1,94 +1,55 @@
 @echo off
 setlocal EnableExtensions
-title MLDForwarder - Build Installer
+title MLD Tools - Build Installer
 
 cd /d "%~dp0"
-
 echo ============================================================
-echo  MLDFORWARDER - BUILD DO INSTALADOR
+echo  MLD TOOLS - BUILD DO INSTALADOR
 echo ============================================================
-echo.
 
-if not exist "build_exe\dist\MLDForwarder.exe" (
-    echo [ERRO] MLDForwarder.exe nao encontrado.
-    echo Execute build_exe.bat primeiro.
-    echo.
-    pause
-    exit /b 1
+for %%F in (MLDTools.exe MLDToolsSync.exe MLDToolsRetro.exe MLDToolsMedia.exe MLDToolsAlbum.exe) do (
+    if not exist "build_exe\dist\%%F" (
+        echo [ERRO] %%F nao encontrado. Execute build_exe.bat primeiro.
+        pause
+        exit /b 1
+    )
 )
 
-if not exist "build_exe\dist\MLDForwarderSync.exe" (
-    echo [ERRO] MLDForwarderSync.exe nao encontrado.
-    echo Execute build_exe.bat primeiro.
-    echo.
-    pause
-    exit /b 1
-)
-
-if not exist "build_exe\dist\MLDForwarderRetro.exe" (
-    echo [ERRO] MLDForwarderRetro.exe nao encontrado.
-    echo Execute build_exe.bat primeiro.
-    echo.
+if not exist "engine\tdl.exe" (
+    echo [ERRO] engine\tdl.exe nao encontrado.
     pause
     exit /b 1
 )
 
 set "ISCC="
-
-for %%I in (ISCC.exe) do (
-    if not "%%~$PATH:I"=="" set "ISCC=%%~$PATH:I"
-)
-
+for %%I in (ISCC.exe) do if not "%%~$PATH:I"=="" set "ISCC=%%~$PATH:I"
 if not defined ISCC if exist "%ProgramFiles%\Inno Setup 7\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 7\ISCC.exe"
 if not defined ISCC if exist "%ProgramFiles(x86)%\Inno Setup 7\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 7\ISCC.exe"
 if not defined ISCC if exist "%LocalAppData%\Programs\Inno Setup 7\ISCC.exe" set "ISCC=%LocalAppData%\Programs\Inno Setup 7\ISCC.exe"
-
 if not defined ISCC if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if not defined ISCC if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not defined ISCC if exist "%LocalAppData%\Programs\Inno Setup 6\ISCC.exe" set "ISCC=%LocalAppData%\Programs\Inno Setup 6\ISCC.exe"
 
 if not defined ISCC (
-    echo [ERRO] O compilador do Inno Setup nao foi encontrado.
-    echo.
-    echo Instale o Inno Setup e execute este arquivo novamente.
+    echo [ERRO] Inno Setup nao encontrado.
     echo Site oficial: https://jrsoftware.org/isdl.php
-    echo.
     pause
     exit /b 1
 )
 
 if not exist "release\installer" mkdir "release\installer"
-
-echo Compilador encontrado:
-echo   %ISCC%
-echo.
-
-if exist "icon.ico" (
-    echo Icone personalizado encontrado.
-    "%ISCC%" /DCustomIcon="icon.ico" "MLDForwarder.iss"
+if exist "Icon.ico" (
+    "%ISCC%" /DCustomIcon="Icon.ico" "MLDTools.iss"
 ) else (
-    echo Nenhum icon.ico encontrado. Usando o icone padrao do executavel.
-    "%ISCC%" "MLDForwarder.iss"
+    "%ISCC%" "MLDTools.iss"
 )
-
 if errorlevel 1 goto :erro
 
-echo.
-echo ============================================================
-echo  INSTALADOR CONCLUIDO
-echo ============================================================
-echo.
-echo Arquivo:
-echo   release\installer\MLDForwarder_Setup_v2.8.1.exe
-echo.
+echo Instalador: release\installer\MLDTools_Setup_v3.0.0.exe
 pause
 exit /b 0
 
 :erro
-echo.
-echo ============================================================
-echo  ERRO DURANTE A COMPILACAO DO INSTALADOR
-echo ============================================================
-echo.
+echo [ERRO] Falha durante a compilacao do instalador.
 pause
 exit /b 1

@@ -1,135 +1,122 @@
 @echo off
 setlocal EnableExtensions
-title MLDForwarder - Build EXE
+title MLD Tools - Build EXE
 
 cd /d "%~dp0"
 
 echo ============================================================
-echo  MLDFORWARDER - BUILD PARA WINDOWS
+echo  MLD TOOLS - BUILD PARA WINDOWS
 echo ============================================================
 echo.
 
 set "PYTHON=py -3.12"
-
 %PYTHON% --version >nul 2>&1
 if errorlevel 1 (
     echo [ERRO] Python 3.12 nao foi encontrado.
-    echo Instale o Python 3.12 e tente novamente.
-    echo.
     pause
     exit /b 1
 )
 
-echo [1/6] Instalando dependencias de build...
+if not exist "engine\tdl.exe" (
+    echo [ERRO] engine\tdl.exe nao foi encontrado.
+    pause
+    exit /b 1
+)
+
+if not exist "Icon.ico" (
+    echo [ERRO] Icon.ico nao foi encontrado.
+    pause
+    exit /b 1
+)
+
+if not exist "assets\app_icon_64.png" (
+    echo [ERRO] assets\app_icon_64.png nao foi encontrado.
+    pause
+    exit /b 1
+)
+
+echo [1/8] Instalando dependencias...
 %PYTHON% -m pip install -r requirements-build.txt
 if errorlevel 1 goto :erro
 
-echo.
-echo [2/6] Limpando builds anteriores...
+echo [2/8] Limpando builds anteriores...
 if exist "build_exe" rmdir /s /q "build_exe"
 if exist "release" rmdir /s /q "release"
-
 mkdir "build_exe"
 mkdir "build_exe\dist"
 mkdir "build_exe\spec"
 mkdir "release"
-mkdir "release\MLDForwarder_Portable"
+mkdir "release\MLDTools_Portable"
 
-set "ICON_ARG="
-if exist "icon.ico" (
-    echo Icone personalizado encontrado: icon.ico
-    copy /y "icon.ico" "build_exe\spec\icon.ico" >nul
-    set "ICON_ARG=--icon=icon.ico"
-)
+copy /y "Icon.ico" "build_exe\spec\Icon.ico" >nul
+xcopy /e /i /y "assets" "build_exe\spec\assets" >nul
+if errorlevel 1 goto :erro
+set "ICON_ARG=--icon=Icon.ico"
+set "UI_DATA_ARGS=--add-data Icon.ico;. --add-data assets;assets"
 
-echo.
-echo [3/6] Compilando MLDForwarder.exe...
-%PYTHON% -m PyInstaller ^
-    --noconfirm ^
-    --clean ^
-    --onefile ^
-    --windowed ^
-    --name "MLDForwarder" ^
-    --distpath "build_exe\dist" ^
-    --workpath "build_exe\work_gui" ^
-    --specpath "build_exe\spec" ^
-    %ICON_ARG% ^
-    "gui.py"
+echo [3/8] Compilando MLDTools.exe...
+%PYTHON% -m PyInstaller --noconfirm --clean --onefile --windowed ^
+    --name "MLDTools" --distpath "build_exe\dist" ^
+    --workpath "build_exe\work_gui" --specpath "build_exe\spec" ^
+    --collect-all "customtkinter" ^
+    %ICON_ARG% %UI_DATA_ARGS% "gui.py"
 if errorlevel 1 goto :erro
 
-echo.
-echo [4/6] Compilando MLDForwarderSync.exe...
-%PYTHON% -m PyInstaller ^
-    --noconfirm ^
-    --clean ^
-    --onefile ^
-    --console ^
-    --name "MLDForwarderSync" ^
-    --distpath "build_exe\dist" ^
-    --workpath "build_exe\work_sync" ^
-    --specpath "build_exe\spec" ^
+echo [4/8] Compilando motores de sincronizacao...
+%PYTHON% -m PyInstaller --noconfirm --clean --onefile --console ^
+    --name "MLDToolsSync" --distpath "build_exe\dist" ^
+    --workpath "build_exe\work_sync" --specpath "build_exe\spec" ^
+    --hidden-import "cryptg" ^
     "sincronizar.py"
 if errorlevel 1 goto :erro
 
-echo.
-echo [5/6] Compilando MLDForwarderRetro.exe...
-%PYTHON% -m PyInstaller ^
-    --noconfirm ^
-    --clean ^
-    --onefile ^
-    --console ^
-    --name "MLDForwarderRetro" ^
-    --distpath "build_exe\dist" ^
-    --workpath "build_exe\work_retro" ^
-    --specpath "build_exe\spec" ^
+%PYTHON% -m PyInstaller --noconfirm --clean --onefile --console ^
+    --name "MLDToolsRetro" --distpath "build_exe\dist" ^
+    --workpath "build_exe\work_retro" --specpath "build_exe\spec" ^
+    --hidden-import "cryptg" ^
     "sincronizar_antigas.py"
 if errorlevel 1 goto :erro
 
-echo.
-echo [6/6] Montando pacote portatil...
+echo [5/8] Compilando Central de midia...
+%PYTHON% -m PyInstaller --noconfirm --clean --onefile --windowed ^
+    --name "MLDToolsMedia" --distpath "build_exe\dist" ^
+    --workpath "build_exe\work_media" --specpath "build_exe\spec" ^
+    --collect-all "customtkinter" ^
+    %ICON_ARG% %UI_DATA_ARGS% "media_app.py"
+if errorlevel 1 goto :erro
 
-copy /y "build_exe\dist\MLDForwarder.exe" "release\MLDForwarder_Portable\" >nul
-copy /y "build_exe\dist\MLDForwarderSync.exe" "release\MLDForwarder_Portable\" >nul
-copy /y "build_exe\dist\MLDForwarderRetro.exe" "release\MLDForwarder_Portable\" >nul
+echo [6/8] Compilando uploader de albuns...
+%PYTHON% -m PyInstaller --noconfirm --clean --onefile --console ^
+    --name "MLDToolsAlbum" --distpath "build_exe\dist" ^
+    --workpath "build_exe\work_album" --specpath "build_exe\spec" ^
+    --hidden-import "cryptg" ^
+    "album_uploader.py"
+if errorlevel 1 goto :erro
 
-copy /y "channels.default.json" "release\MLDForwarder_Portable\channels.json" >nul
-copy /y "normal_config.default.json" "release\MLDForwarder_Portable\normal_config.json" >nul
-copy /y "retro_config.default.json" "release\MLDForwarder_Portable\retro_config.json" >nul
-copy /y "app_config.default.json" "release\MLDForwarder_Portable\app_config.json" >nul
-copy /y ".env.example" "release\MLDForwarder_Portable\" >nul
-copy /y "README_PORTABLE.txt" "release\MLDForwarder_Portable\" >nul
-copy /y "CHANGELOG.txt" "release\MLDForwarder_Portable\" >nul
+echo [7/8] Montando pacote portatil...
+for %%F in (MLDTools.exe MLDToolsSync.exe MLDToolsRetro.exe MLDToolsMedia.exe MLDToolsAlbum.exe) do copy /y "build_exe\dist\%%F" "release\MLDTools_Portable\" >nul
+mkdir "release\MLDTools_Portable\engine"
+copy /y "engine\tdl.exe" "release\MLDTools_Portable\engine\" >nul
+copy /y "engine\LICENSE-tdl.txt" "release\MLDTools_Portable\engine\" >nul
+copy /y "engine\README-tdl.md" "release\MLDTools_Portable\engine\" >nul
+copy /y "channels.default.json" "release\MLDTools_Portable\channels.json" >nul
+copy /y "normal_config.default.json" "release\MLDTools_Portable\normal_config.json" >nul
+copy /y "retro_config.default.json" "release\MLDTools_Portable\retro_config.json" >nul
+copy /y "app_config.default.json" "release\MLDTools_Portable\app_config.json" >nul
+for %%F in (.env.example README_PORTABLE.txt CHANGELOG.txt LICENSE THIRD_PARTY_NOTICES.md) do copy /y "%%F" "release\MLDTools_Portable\" >nul
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Compress-Archive -Path 'release\MLDForwarder_Portable\*' -DestinationPath 'release\MLDForwarder_Portable.zip' -Force"
+echo [8/8] Compactando...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'release\MLDTools_Portable\*' -DestinationPath 'release\MLDTools_Portable.zip' -Force"
+if errorlevel 1 goto :erro
 
 echo.
-echo ============================================================
-echo  BUILD CONCLUIDO
-echo ============================================================
-echo.
-echo EXEs:
-echo   release\MLDForwarder_Portable\MLDForwarder.exe
-echo   release\MLDForwarder_Portable\MLDForwarderSync.exe
-echo   release\MLDForwarder_Portable\MLDForwarderRetro.exe
-echo.
-echo ZIP:
-echo   release\MLDForwarder_Portable.zip
-echo.
-echo IMPORTANTE:
-echo Este pacote e LIMPO. Ele nao inclui seu .env, sessao,
-echo rotas pessoais ou arquivos de progresso.
-echo.
+echo EXE: release\MLDTools_Portable\MLDTools.exe
+echo ZIP: release\MLDTools_Portable.zip
+echo O pacote nao inclui .env, sessoes, rotas ou historico pessoal.
 pause
 exit /b 0
 
 :erro
-echo.
-echo ============================================================
-echo  ERRO DURANTE O BUILD
-echo ============================================================
-echo.
-echo Revise as mensagens acima.
-echo.
+echo [ERRO] Falha durante o build.
 pause
 exit /b 1

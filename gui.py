@@ -1,4 +1,5 @@
 import os
+import math
 import re
 import subprocess
 import sys
@@ -6,9 +7,32 @@ import threading
 import tkinter as tk
 import webbrowser
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 
 import auth_service
+import customtkinter as ctk
+
+from ui_theme import (
+    COLORS,
+    FONT,
+    FONT_MONO,
+    FONT_SEMIBOLD,
+    PillLabel,
+    ResponsiveGrid,
+    RoundedPanel,
+    SaaSButton,
+    ScrollablePage,
+    bind_responsive_wrap,
+    capture_window_placement,
+    configure_ttk_theme,
+    configure_window,
+    enable_dpi_awareness,
+    load_brand_icon,
+    restore_window_placement,
+)
+
+# Mantém as chamadas existentes e troca somente a implementação visual.
+ttk.Button = SaaSButton
 
 from config_utils import (
     APP_CONFIG_FILE,
@@ -29,7 +53,14 @@ from config_utils import (
     montar_chave_rota,
     normalizar_peer,
     normalizar_topico,
+    resolver_temp_parent_dir,
     salvar_json,
+)
+from media_transfer import (
+    configurar_armazenamento_temporario,
+    estado_armazenamento_temporario,
+    formatar_tamanho,
+    limpar_armazenamento_temporario,
 )
 
 
@@ -37,43 +68,15 @@ if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).resolve().parent
 else:
     BASE_DIR = Path(__file__).resolve().parent
-VERSION = "2.8.1-exe"
+VERSION = "3.0.0"
 API_PORTAL_URL = "https://my.telegram.org/"
-
-
-COLORS = {
-    # Paleta principal
-    "bg": "#232323",
-    "sidebar": "#13191B",
-    "panel": "#20282B",
-    "panel_2": "#273135",
-    "line": "#344044",
-
-    # Tipografia
-    "text": "#F2F4FF",
-    "muted": "#9EA8AC",
-
-    # Identidade / seleção
-    "accent": "#0083E8",
-    "accent_hover": "#0073CC",
-
-    # Estados positivos / execução
-    "success": "#9AFF26",
-    "success_hover": "#B2FF5B",
-
-    # Estados destrutivos / atenção
-    "danger": "#8C0021",
-    "danger_bg": "#2E171D",
-    "danger_hover": "#442029",
-    "warning": "#D7FF9E",
-}
 
 
 # ============================================================
 # DIÁLOGO DE CANAL
 # ============================================================
 
-class ChannelDialog(tk.Toplevel):
+class ChannelDialog(ctk.CTkToplevel):
 
     def __init__(
         self,
@@ -96,14 +99,47 @@ class ChannelDialog(tk.Toplevel):
             "source": {},
             "target": {}
         }
+        self.peer_busy = False
+        self.peer_loaded = False
+        self.peer_maps = {}
+        self.peer_labels = {}
+        self.peer_selected_values = {
+            "source": "",
+            "target": ""
+        }
 
         self.title(titulo)
-        self.configure(bg=COLORS["panel"])
+        self.configure(fg_color=COLORS["panel"])
+        configure_window(self, BASE_DIR)
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
 
         dados = dados or {}
+
+        dialog_header = tk.Frame(
+            self,
+            bg=COLORS["sidebar"],
+            padx=22,
+            pady=17,
+        )
+        dialog_header.pack(fill="x")
+
+        tk.Label(
+            dialog_header,
+            text=titulo,
+            bg=COLORS["sidebar"],
+            fg=COLORS["text"],
+            font=(FONT_SEMIBOLD, 17),
+        ).pack(anchor="w")
+
+        tk.Label(
+            dialog_header,
+            text="Defina origem, destino e tópicos sem precisar copiar IDs manualmente.",
+            bg=COLORS["sidebar"],
+            fg=COLORS["muted"],
+            font=(FONT, 10),
+        ).pack(anchor="w", pady=(4, 0))
 
         frame = tk.Frame(
             self,
@@ -116,12 +152,51 @@ class ChannelDialog(tk.Toplevel):
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(1, weight=1)
 
+        peer_toolbar = tk.Frame(
+            frame,
+            bg=COLORS["panel"]
+        )
+        peer_toolbar.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(0, 16)
+        )
+
+        self.peer_status_var = tk.StringVar(
+            value="Carregando canais e grupos disponíveis..."
+        )
+        self.peer_status_label = tk.Label(
+            peer_toolbar,
+            textvariable=self.peer_status_var,
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            font=("Segoe UI", 10),
+            anchor="w"
+        )
+        self.peer_status_label.pack(
+            side="left",
+            fill="x",
+            expand=True
+        )
+
+        self.peer_refresh_button = ttk.Button(
+            peer_toolbar,
+            text="Atualizar lista",
+            command=self.listar_canais_grupos
+        )
+        self.peer_refresh_button.pack(
+            side="right",
+            padx=(12, 0)
+        )
+
         origem_frame = tk.Frame(
             frame,
             bg=COLORS["panel"]
         )
         origem_frame.grid(
-            row=0,
+            row=1,
             column=0,
             sticky="nsew",
             padx=(0, 12)
@@ -132,7 +207,7 @@ class ChannelDialog(tk.Toplevel):
             bg=COLORS["panel"]
         )
         destino_frame.grid(
-            row=0,
+            row=1,
             column=1,
             sticky="nsew",
             padx=(12, 0)
@@ -158,7 +233,7 @@ class ChannelDialog(tk.Toplevel):
             frame,
             "Nome da rota"
         ).grid(
-            row=1,
+            row=2,
             column=0,
             columnspan=2,
             sticky="w",
@@ -170,23 +245,66 @@ class ChannelDialog(tk.Toplevel):
             width=94
         )
         self.nome.grid(
-            row=2,
+            row=3,
             column=0,
             columnspan=2,
             sticky="ew",
-            pady=(5, 20)
+            pady=(5, 14)
         )
         self.nome.insert(
             0,
             str(dados.get("name", ""))
         )
 
+        self.download_reupload_var = tk.BooleanVar(
+            value=bool(
+                dados.get("download_reupload", False)
+            )
+        )
+
+        opcao_transferencia = tk.Frame(
+            frame,
+            bg=COLORS["panel"]
+        )
+        opcao_transferencia.grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="ew",
+            pady=(0, 18)
+        )
+
+        tk.Checkbutton(
+            opcao_transferencia,
+            text="Baixar e reenviar arquivos",
+            variable=self.download_reupload_var,
+            bg=COLORS["panel"],
+            fg=COLORS["text"],
+            activebackground=COLORS["panel"],
+            activeforeground=COLORS["text"],
+            selectcolor=COLORS["panel_2"],
+            font=("Segoe UI Semibold", 10),
+            highlightthickness=0,
+            bd=0
+        ).pack(anchor="w")
+
+        tk.Label(
+            opcao_transferencia,
+            text=(
+                "Use quando a origem permite baixar, mas bloqueia o "
+                "encaminhamento. Consome espaço temporário, download e upload."
+            ),
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            font=("Segoe UI", 10)
+        ).pack(anchor="w", padx=(22, 0), pady=(2, 0))
+
         botoes = tk.Frame(
             frame,
             bg=COLORS["panel"]
         )
         botoes.grid(
-            row=3,
+            row=5,
             column=0,
             columnspan=2,
             sticky="e"
@@ -216,6 +334,13 @@ class ChannelDialog(tk.Toplevel):
 
         self.source_peer.focus_set()
 
+        self.after(
+            100,
+            lambda: self.listar_canais_grupos(
+                mostrar_erro=False
+            )
+        )
+
 
     def _label(self, parent, texto):
 
@@ -224,7 +349,7 @@ class ChannelDialog(tk.Toplevel):
             text=texto,
             bg=COLORS["panel"],
             fg=COLORS["text"],
-            font=("Segoe UI", 10)
+            font=(FONT, 11)
         )
 
 
@@ -242,7 +367,7 @@ class ChannelDialog(tk.Toplevel):
             text=titulo,
             bg=COLORS["panel"],
             fg=COLORS["success"],
-            font=("Segoe UI Semibold", 10)
+            font=(FONT_SEMIBOLD, 11)
         ).grid(
             row=0,
             column=0,
@@ -266,9 +391,12 @@ class ChannelDialog(tk.Toplevel):
             pady=(5, 16)
         )
 
-        peer_entry = ttk.Entry(
+        peer_entry = ttk.Combobox(
             peer_line,
-            width=28
+            width=28,
+            state="normal",
+            values=(),
+            postcommand=self._carregar_dialogos_se_necessario
         )
         peer_entry.pack(
             side="left",
@@ -276,6 +404,10 @@ class ChannelDialog(tk.Toplevel):
             expand=True
         )
         peer_entry.insert(0, str(peer_id))
+        peer_entry.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._selecionar_peer(lado)
+        )
 
         topic_button = ttk.Button(
             peer_line,
@@ -318,7 +450,7 @@ class ChannelDialog(tk.Toplevel):
             text=ajuda,
             bg=COLORS["panel"],
             fg=COLORS["muted"],
-            font=("Segoe UI", 9)
+            font=(FONT, 10)
         ).grid(
             row=5,
             column=0,
@@ -355,7 +487,7 @@ class ChannelDialog(tk.Toplevel):
             textvariable=status_var,
             bg=COLORS["panel"],
             fg=COLORS["muted"],
-            font=("Segoe UI", 9)
+            font=("Segoe UI", 10)
         )
         status_label.grid(
             row=8,
@@ -371,6 +503,266 @@ class ChannelDialog(tk.Toplevel):
         setattr(self, f"{lado}_topic_combo", topic_combo)
         setattr(self, f"{lado}_topic_status_var", status_var)
         setattr(self, f"{lado}_topic_status", status_label)
+        self.peer_selected_values[lado] = str(peer_id).strip()
+
+
+    def _carregar_dialogos_se_necessario(self):
+
+        if not self.peer_loaded and not self.peer_busy:
+            self.listar_canais_grupos(
+                mostrar_erro=False
+            )
+
+
+    def _definir_lista_dialogos_ativa(self, ativa):
+
+        self.peer_busy = ativa
+        self.peer_refresh_button.configure(
+            state=(
+                "disabled"
+                if ativa
+                else "normal"
+            )
+        )
+
+
+    def listar_canais_grupos(self, mostrar_erro=True):
+
+        if self.peer_busy:
+            return
+
+        if self.settings_provider is None:
+            mensagem = "As credenciais do Telegram não estão disponíveis."
+            self.peer_status_var.set(mensagem)
+
+            if mostrar_erro:
+                messagebox.showerror(
+                    "Canais e grupos",
+                    mensagem,
+                    parent=self
+                )
+            return
+
+        settings = self.settings_provider()
+
+        if not settings:
+            mensagem = (
+                "Configure API ID, API Hash e sessão na aba Telegram."
+            )
+            self.peer_status_var.set(mensagem)
+
+            if mostrar_erro:
+                messagebox.showerror(
+                    "Canais e grupos",
+                    mensagem,
+                    parent=self
+                )
+            return
+
+        api_id, api_hash, session = settings
+
+        self._definir_lista_dialogos_ativa(True)
+        self.peer_status_var.set(
+            "Consultando canais e grupos no Telegram..."
+        )
+        self.peer_status_label.configure(
+            fg=COLORS["warning"]
+        )
+
+        def worker():
+
+            try:
+                result = auth_service.executar(
+                    auth_service.listar_canais_grupos(
+                        api_id,
+                        api_hash,
+                        session
+                    )
+                )
+            except Exception as erro:
+                result = {
+                    "ok": False,
+                    "error": str(erro)
+                }
+
+            try:
+                self.after(
+                    0,
+                    self._resultado_listar_canais_grupos,
+                    result,
+                    mostrar_erro
+                )
+            except tk.TclError:
+                pass
+
+        threading.Thread(
+            target=worker,
+            daemon=True
+        ).start()
+
+
+    def _resultado_listar_canais_grupos(
+        self,
+        result,
+        mostrar_erro
+    ):
+
+        if not self.winfo_exists():
+            return
+
+        self._definir_lista_dialogos_ativa(False)
+
+        if not result.get("ok"):
+            mensagem = result.get(
+                "error",
+                "Erro desconhecido."
+            )
+            self.peer_status_var.set(
+                "Lista indisponível. Ainda é possível informar o ID manualmente."
+            )
+            self.peer_status_label.configure(
+                fg=COLORS["muted"]
+            )
+
+            if mostrar_erro:
+                messagebox.showerror(
+                    "Canais e grupos",
+                    mensagem,
+                    parent=self
+                )
+            return
+
+        dialogos = result.get("dialogs", [])
+        opcoes = []
+        self.peer_maps = {}
+        self.peer_labels = {}
+
+        for dialogo in dialogos:
+            peer_id = int(dialogo["id"])
+            titulo = " ".join(
+                str(dialogo.get("title", peer_id)).split()
+            )
+            tipo = str(dialogo.get("type", "Canal ou grupo"))
+            opcao = f"{titulo} — {tipo} ({peer_id})"
+
+            self.peer_maps[opcao] = peer_id
+            self.peer_labels[str(peer_id).casefold()] = opcao
+
+            username = str(dialogo.get("username", "")).strip()
+
+            if username:
+                self.peer_labels[username.casefold()] = opcao
+
+            opcoes.append(opcao)
+
+        for lado in ("source", "target"):
+            peer_combo = getattr(
+                self,
+                f"{lado}_peer"
+            )
+            peer_combo.configure(values=opcoes)
+
+            valor_atual = peer_combo.get().strip()
+            rotulo = self.peer_labels.get(
+                valor_atual.casefold()
+            )
+
+            if rotulo:
+                peer_combo.set(rotulo)
+                self.peer_selected_values[lado] = str(
+                    self.peer_maps[rotulo]
+                )
+
+        self.peer_loaded = True
+
+        if opcoes:
+            quantidade = len(opcoes)
+            resumo = (
+                "1 canal ou grupo disponível."
+                if quantidade == 1
+                else f"{quantidade} canais e grupos disponíveis."
+            )
+            self.peer_status_var.set(
+                f"{resumo} Escolha na lista ou informe um ID/@username."
+            )
+            self.peer_status_label.configure(
+                fg=COLORS["success"]
+            )
+        else:
+            self.peer_status_var.set(
+                "Nenhum canal ou grupo visível foi encontrado."
+            )
+            self.peer_status_label.configure(
+                fg=COLORS["muted"]
+            )
+
+
+    def _selecionar_peer(self, lado):
+
+        peer_combo = getattr(
+            self,
+            f"{lado}_peer"
+        )
+        selecionado = peer_combo.get().strip()
+        peer_id = self.peer_maps.get(selecionado)
+
+        if peer_id is None:
+            return
+
+        valor_anterior = self.peer_selected_values.get(
+            lado,
+            ""
+        )
+        novo_valor = str(peer_id)
+        self.peer_selected_values[lado] = novo_valor
+
+        if valor_anterior == novo_valor:
+            return
+
+        topic_entry = getattr(
+            self,
+            f"{lado}_topic"
+        )
+        topic_combo = getattr(
+            self,
+            f"{lado}_topic_combo"
+        )
+        status_var = getattr(
+            self,
+            f"{lado}_topic_status_var"
+        )
+        status_label = getattr(
+            self,
+            f"{lado}_topic_status"
+        )
+
+        topic_entry.delete(0, tk.END)
+        topic_combo.set("")
+        topic_combo.configure(
+            values=(),
+            state="disabled"
+        )
+        self.topic_maps[lado] = {}
+        status_var.set(
+            "Clique em Buscar tópicos se este grupo usar fórum."
+        )
+        status_label.configure(
+            fg=COLORS["muted"]
+        )
+
+
+    def _peer_texto(self, lado):
+
+        peer_combo = getattr(
+            self,
+            f"{lado}_peer"
+        )
+        texto = peer_combo.get().strip()
+
+        return self.peer_maps.get(
+            texto,
+            texto
+        )
 
 
     def _definir_busca_ativa(self, lado, ativa):
@@ -393,10 +785,7 @@ class ChannelDialog(tk.Toplevel):
         if self.topic_busy[lado]:
             return
 
-        peer_texto = getattr(
-            self,
-            f"{lado}_peer"
-        ).get().strip()
+        peer_texto = self._peer_texto(lado)
 
         if not peer_texto:
             messagebox.showerror(
@@ -612,9 +1001,9 @@ class ChannelDialog(tk.Toplevel):
 
     def salvar(self):
 
-        origem_texto = self.source_peer.get().strip()
+        origem_texto = self._peer_texto("source")
         topico_texto = self.source_topic.get().strip()
-        destino_texto = self.target_peer.get().strip()
+        destino_texto = self._peer_texto("target")
         topico_destino_texto = self.target_topic.get().strip()
         nome = self.nome.get().strip()
 
@@ -669,6 +1058,9 @@ class ChannelDialog(tk.Toplevel):
             "topic_id": topico_id,
             "target_id": destino,
             "target_topic_id": topico_destino_id,
+            "download_reupload": bool(
+                self.download_reupload_var.get()
+            ),
             "name": nome
         }
 
@@ -679,32 +1071,53 @@ class ChannelDialog(tk.Toplevel):
 # GUI PRINCIPAL
 # ============================================================
 
-class MLDForwarderGUI(tk.Tk):
+class MLDToolsGUI(ctk.CTk):
 
     def __init__(self):
 
+        enable_dpi_awareness()
         super().__init__()
 
         self.title(
-            f"MLDForwarder {VERSION}"
+            f"MLD Tools {VERSION}"
         )
-        self.geometry("1180x760")
-        self.minsize(1020, 650)
-        self.configure(bg=COLORS["bg"])
+        self.minsize(960, 640)
+        self.configure(fg_color=COLORS["bg"])
+        configure_window(self, BASE_DIR)
+
+        try:
+            startup_config = carregar_config_app()
+        except RuntimeError:
+            startup_config = {}
+        self._normal_window_geometry = restore_window_placement(
+            self,
+            startup_config.get("window_geometry", ""),
+            bool(startup_config.get("window_maximized", False)),
+            default_size=(1320, 860),
+            minimum_size=(960, 640),
+        )
+        self.bind("<Configure>", self._remember_window_placement, add="+")
 
         self.channels = {}
 
         self.normal_process = None
         self.retro_process = None
+        self.media_process = None
 
         self.auth_busy = False
         self.auth_phone = ""
         self.auth_phone_code_hash = None
 
         self.nav_buttons = {}
+        self.nav_rows = {}
+        self.nav_indicators = {}
         self.pages = {}
+        self.brand_icon = None
 
         self.retro_map = {}
+        self.normal_route_keys = []
+        self.normal_selection_initialized = False
+        self.normal_active_count = 0
 
         self._configurar_estilo()
         self._construir_shell()
@@ -728,6 +1141,27 @@ class MLDForwarderGUI(tk.Tk):
     # ========================================================
     # ESTILO
     # ========================================================
+
+    def _remember_window_placement(self, _event=None):
+        try:
+            if str(self.state()) == "normal":
+                self._normal_window_geometry = self.geometry()
+        except tk.TclError:
+            pass
+
+
+    def _save_window_placement(self):
+        geometry, maximized = capture_window_placement(
+            self,
+            self._normal_window_geometry,
+        )
+        try:
+            config = carregar_config_app()
+            config["window_geometry"] = geometry
+            config["window_maximized"] = maximized
+            salvar_json(APP_CONFIG_FILE, config)
+        except (OSError, RuntimeError):
+            pass
 
     def _configurar_estilo(self):
 
@@ -872,7 +1306,7 @@ class MLDForwarderGUI(tk.Tk):
             foreground=COLORS["muted"],
             borderwidth=0,
             padding=8,
-            font=("Segoe UI", 9, "bold")
+            font=("Segoe UI", 10, "bold")
         )
 
         style.map(
@@ -891,6 +1325,10 @@ class MLDForwarderGUI(tk.Tk):
             darkcolor=COLORS["success"]
         )
 
+        # A configuração compartilhada fecha o estilo dos controles usados
+        # também pela Central de mídia e mantém as duas janelas consistentes.
+        configure_ttk_theme(self)
+
 
     # ========================================================
     # SHELL
@@ -901,7 +1339,9 @@ class MLDForwarderGUI(tk.Tk):
         self.sidebar = tk.Frame(
             self,
             bg=COLORS["sidebar"],
-            width=220
+            width=248,
+            highlightbackground=COLORS["line_soft"],
+            highlightthickness=0,
         )
         self.sidebar.pack(
             side="left",
@@ -912,72 +1352,160 @@ class MLDForwarderGUI(tk.Tk):
         brand = tk.Frame(
             self.sidebar,
             bg=COLORS["sidebar"],
-            padx=20,
-            pady=22
+            padx=18,
+            pady=20,
         )
         brand.pack(fill="x")
 
+        brand_row = tk.Frame(brand, bg=COLORS["sidebar"])
+        brand_row.pack(fill="x")
+
+        self.brand_icon = load_brand_icon(self, BASE_DIR)
+        if self.brand_icon is not None:
+            tk.Label(
+                brand_row,
+                image=self.brand_icon,
+                bg=COLORS["sidebar"],
+                bd=0,
+            ).pack(side="left", padx=(0, 12))
+        else:
+            fallback = tk.Frame(
+                brand_row,
+                bg=COLORS["accent_soft"],
+                width=48,
+                height=48,
+                highlightbackground=COLORS["accent"],
+                highlightthickness=1,
+            )
+            fallback.pack(side="left", padx=(0, 12))
+            fallback.pack_propagate(False)
+            tk.Label(
+                fallback,
+                text="MLD",
+                bg=COLORS["accent_soft"],
+                fg=COLORS["accent_glow"],
+                font=(FONT_SEMIBOLD, 10),
+            ).pack(expand=True)
+
+        brand_copy = tk.Frame(brand_row, bg=COLORS["sidebar"])
+        brand_copy.pack(side="left", fill="x", expand=True)
+
         tk.Label(
-            brand,
-            text="MLDFORWARDER",
+            brand_copy,
+            text="MLD TOOLS",
             bg=COLORS["sidebar"],
             fg=COLORS["text"],
-            font=("Segoe UI", 15, "bold")
+            font=(FONT_SEMIBOLD, 16),
         ).pack(anchor="w")
 
         tk.Label(
-            brand,
-            text=f"CONTROL PANEL  /  v{VERSION}",
+            brand_copy,
+            text="TELEGRAM MEDIA SUITE",
             bg=COLORS["sidebar"],
-            fg=COLORS["accent"],
-            font=("Segoe UI", 8, "bold")
+            fg=COLORS["purple"],
+            font=(FONT_SEMIBOLD, 9),
         ).pack(anchor="w", pady=(3, 0))
+
+        version_badge = PillLabel(
+            brand_copy,
+            text=f"v{VERSION}",
+            bg=COLORS["purple_soft"],
+            fg="#B9ABFF",
+            font=(FONT_SEMIBOLD, 9),
+            padx=8,
+            pady=3,
+        )
+        version_badge.pack(anchor="w", pady=(7, 0))
+
+        tk.Frame(
+            self.sidebar,
+            bg=COLORS["line_soft"],
+            height=1,
+        ).pack(fill="x", padx=18, pady=(0, 17))
 
         nav = tk.Frame(
             self.sidebar,
             bg=COLORS["sidebar"],
-            padx=10
+            padx=10,
         )
-        nav.pack(fill="x", pady=(6, 0))
+        nav.pack(fill="x")
+
+        tk.Label(
+            nav,
+            text="NAVEGAÇÃO",
+            bg=COLORS["sidebar"],
+            fg=COLORS["subtle"],
+            font=(FONT_SEMIBOLD, 9),
+        ).pack(anchor="w", padx=10, pady=(0, 8))
 
         itens = [
-            ("dashboard", "Dashboard"),
-            ("canais", "Rotas"),
-            ("retro", "Retroativo"),
-            ("telegram", "Telegram"),
-            ("config", "Configurações"),
-            ("log", "Log"),
+            ("dashboard", "◫", "Visão geral"),
+            ("canais", "⇄", "Rotas"),
+            ("retro", "↺", "Retroativo"),
+            ("media", "↓", "Central de mídia"),
+            ("telegram", "✦", "Telegram"),
+            ("config", "⚙", "Configurações"),
+            ("log", "≡", "Log"),
         ]
 
-        for chave, texto in itens:
-            botao = tk.Button(
-                nav,
-                text=texto,
+        for chave, icone, texto in itens:
+            nav_row = tk.Frame(nav, bg=COLORS["sidebar"], height=42)
+            nav_row.pack(fill="x", pady=2)
+            nav_row.pack_propagate(False)
+
+            indicator = tk.Frame(nav_row, bg=COLORS["sidebar"], width=3)
+            indicator.pack(side="left", fill="y")
+
+            botao = SaaSButton(
+                nav_row,
+                text=f"  {icone}    {texto}",
                 anchor="w",
                 relief="flat",
                 bd=0,
-                padx=14,
-                pady=10,
+                padx=10,
+                pady=9,
                 cursor="hand2",
-                font=("Segoe UI", 10),
+                bg=COLORS["sidebar"],
+                fg=COLORS["muted"],
+                activebackground=COLORS["panel_hover"],
+                activeforeground=COLORS["text"],
+                font=(FONT, 11),
                 command=lambda c=chave: self.mostrar_pagina(c)
             )
-            botao.pack(fill="x", pady=2)
+            botao.pack(side="left", fill="both", expand=True)
 
-            self.nav_buttons[
-                chave
-            ] = botao
+            self.nav_buttons[chave] = botao
+            self.nav_rows[chave] = nav_row
+            self.nav_indicators[chave] = indicator
 
-        status_box = tk.Frame(
+        status_area = tk.Frame(
             self.sidebar,
             bg=COLORS["sidebar"],
-            padx=20,
-            pady=18
+            padx=14,
+            pady=16,
         )
-        status_box.pack(
+        status_area.pack(
             side="bottom",
-            fill="x"
+            fill="x",
         )
+
+        status_box = RoundedPanel(
+            status_area,
+            padx=13,
+            pady=12,
+            fg_color=COLORS["panel"],
+            border_color=COLORS["line_soft"],
+            corner_radius=9,
+        )
+        status_box.pack(fill="x")
+
+        tk.Label(
+            status_box,
+            text="STATUS DO SISTEMA",
+            bg=COLORS["panel"],
+            fg=COLORS["subtle"],
+            font=(FONT_SEMIBOLD, 9),
+        ).pack(anchor="w", pady=(0, 7))
 
         self.sidebar_telegram_var = tk.StringVar(
             value="● Telegram não verificado"
@@ -990,10 +1518,10 @@ class MLDForwarderGUI(tk.Tk):
         self.sidebar_telegram_label = tk.Label(
             status_box,
             textvariable=self.sidebar_telegram_var,
-            bg=COLORS["sidebar"],
+            bg=COLORS["panel"],
             fg=COLORS["muted"],
             anchor="w",
-            font=("Segoe UI", 9)
+            font=(FONT, 10)
         )
         self.sidebar_telegram_label.pack(
             fill="x",
@@ -1003,10 +1531,10 @@ class MLDForwarderGUI(tk.Tk):
         self.sidebar_engine_label = tk.Label(
             status_box,
             textvariable=self.sidebar_engine_var,
-            bg=COLORS["sidebar"],
+            bg=COLORS["panel"],
             fg=COLORS["muted"],
             anchor="w",
-            font=("Segoe UI", 9)
+            font=(FONT, 10)
         )
         self.sidebar_engine_label.pack(
             fill="x",
@@ -1026,30 +1554,68 @@ class MLDForwarderGUI(tk.Tk):
         top = tk.Frame(
             self.main,
             bg=COLORS["bg"],
-            padx=28,
-            pady=20
+            padx=32,
+            pady=22,
         )
         top.pack(fill="x")
 
+        title_group = tk.Frame(top, bg=COLORS["bg"])
+        title_group.pack(side="left", fill="x", expand=True)
+
+        tk.Label(
+            title_group,
+            text="MLD WORKSPACE  /  AUTOMAÇÃO LOCAL",
+            bg=COLORS["bg"],
+            fg=COLORS["accent"],
+            font=(FONT_SEMIBOLD, 9),
+        ).pack(anchor="w")
+
         self.page_title_var = tk.StringVar(
-            value="Dashboard"
+            value="Visão geral"
+        )
+
+        self.page_description_var = tk.StringVar(
+            value="Acompanhe a conta, as rotas e os mecanismos de sincronização."
         )
 
         tk.Label(
-            top,
+            title_group,
             textvariable=self.page_title_var,
             bg=COLORS["bg"],
             fg=COLORS["text"],
-            font=("Segoe UI", 19, "bold")
-        ).pack(
-            side="left"
+            font=(FONT_SEMIBOLD, 25),
+        ).pack(anchor="w", pady=(4, 0))
+
+        tk.Label(
+            title_group,
+            textvariable=self.page_description_var,
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+            font=(FONT, 10),
+        ).pack(anchor="w", pady=(4, 0))
+
+        privacy_badge = PillLabel(
+            top,
+            text="●  LOCAL E PRIVADO",
+            bg=COLORS["success_soft"],
+            fg=COLORS["success"],
+            font=(FONT_SEMIBOLD, 9),
+            padx=12,
+            pady=6,
         )
+        privacy_badge.pack(side="right", anchor="n", pady=(7, 0))
+
+        tk.Frame(
+            self.main,
+            bg=COLORS["line_soft"],
+            height=1,
+        ).pack(fill="x")
 
         self.content = tk.Frame(
             self.main,
             bg=COLORS["bg"],
-            padx=28,
-            pady=4
+            padx=32,
+            pady=20,
         )
         self.content.pack(
             fill="both",
@@ -1063,11 +1629,12 @@ class MLDForwarderGUI(tk.Tk):
             "dashboard",
             "canais",
             "retro",
+            "media",
             "telegram",
             "config",
             "log",
         ]:
-            pagina = tk.Frame(
+            pagina = ScrollablePage(
                 self.content,
                 bg=COLORS["bg"]
             )
@@ -1082,6 +1649,7 @@ class MLDForwarderGUI(tk.Tk):
         self._pagina_dashboard()
         self._pagina_canais()
         self._pagina_retro()
+        self._pagina_midia()
         self._pagina_telegram()
         self._pagina_config()
         self._pagina_log()
@@ -1090,19 +1658,32 @@ class MLDForwarderGUI(tk.Tk):
     def mostrar_pagina(self, chave):
 
         titulos = {
-            "dashboard": "Dashboard",
+            "dashboard": "Visão geral",
             "canais": "Gerenciar rotas",
             "retro": "Sincronização retroativa",
+            "media": "Central de mídia",
             "telegram": "Conta Telegram",
             "config": "Configurações",
             "log": "Log de atividade",
         }
 
+        descricoes = {
+            "dashboard": "Acompanhe a conta, as rotas e os mecanismos de sincronização.",
+            "canais": "Organize os fluxos entre canais, grupos e tópicos do Telegram.",
+            "retro": "Importe publicações antigas com controle de intervalo e retomada.",
+            "media": "Baixe, exporte e envie arquivos usando o motor de mídia dedicado.",
+            "telegram": "Gerencie credenciais e verifique a sessão usada pelo sincronizador.",
+            "config": "Ajuste comportamento, desempenho e armazenamento temporário.",
+            "log": "Consulte eventos técnicos e o estado das operações em tempo real.",
+        }
+
         self.pages[chave].tkraise()
+        self.pages[chave].scroll_to_top()
 
         self.page_title_var.set(
             titulos[chave]
         )
+        self.page_description_var.set(descricoes[chave])
 
         for nome, botao in (
             self.nav_buttons.items()
@@ -1111,7 +1692,7 @@ class MLDForwarderGUI(tk.Tk):
 
             botao.configure(
                 bg=(
-                    COLORS["accent"]
+                    COLORS["accent_soft"]
                     if ativo
                     else COLORS["sidebar"]
                 ),
@@ -1121,24 +1702,99 @@ class MLDForwarderGUI(tk.Tk):
                     else COLORS["muted"]
                 ),
                 activebackground=(
-                    COLORS["accent_hover"]
+                    COLORS["panel_hover"]
                     if ativo
-                    else COLORS["panel_2"]
+                    else COLORS["panel_hover"]
                 ),
                 activeforeground=(
                     COLORS["text"]
                     if ativo
                     else COLORS["text"]
                 ),
-                font=(
-                    "Segoe UI",
-                    10,
-                    "bold"
-                ) if ativo else (
-                    "Segoe UI",
-                    10
-                )
+                font=(FONT_SEMIBOLD, 11) if ativo else (FONT, 11)
             )
+
+            self.nav_rows[nome].configure(
+                bg=COLORS["accent_soft"] if ativo else COLORS["sidebar"]
+            )
+            self.nav_indicators[nome].configure(
+                bg=COLORS["accent"] if ativo else COLORS["sidebar"]
+            )
+
+
+    def _pagina_midia(self):
+
+        page = self.pages["media"]
+
+        intro = self._panel(page, padx=22, pady=20)
+        intro.pack(fill="x")
+        PillLabel(
+            intro,
+            text="TDL ENGINE  /  TRANSFERÊNCIAS",
+            bg=COLORS["purple_soft"],
+            fg="#B9ABFF",
+            font=(FONT_SEMIBOLD, 9),
+            padx=9,
+            pady=4,
+        ).pack(anchor="w")
+        tk.Label(
+            intro,
+            text="Downloads, exportações e uploads",
+            bg=COLORS["panel"],
+            fg=COLORS["text"],
+            font=(FONT_SEMIBOLD, 16),
+        ).pack(anchor="w", pady=(10, 0))
+        self._muted(
+            intro,
+            (
+                "A Central de mídia reúne as ferramentas do antigo MLD Fetch. "
+                "Ela usa um motor separado para não bloquear o sincronizador e só "
+                "inicia transferências após sua confirmação."
+            ),
+        ).pack(anchor="w", pady=(6, 0))
+
+        actions = tk.Frame(page, bg=COLORS["bg"])
+        actions.pack(fill="x", pady=(16, 0))
+
+        items = [
+            ("↓", "Novo download", "Links, canais, grupos, tópicos ou JSON.", "new", COLORS["accent"]),
+            ("⇲", "Central de exportação", "Exporte mensagens e membros para JSON.", "export", COLORS["purple"]),
+            ("↑", "Upload para Telegram", "Envie arquivos, pastas e álbuns.", "upload", COLORS["success"]),
+            ("≡", "Fila e histórico", "Acompanhe, pause e retome tarefas.", "queue", COLORS["warning"]),
+        ]
+
+        action_cards = []
+        for icon, title, description, target, color in items:
+            panel = self._panel(actions, padx=18, pady=16)
+            action_cards.append(panel)
+            card_header = tk.Frame(panel, bg=COLORS["panel"])
+            card_header.pack(fill="x")
+            tk.Label(
+                card_header,
+                text=icon,
+                bg=COLORS["panel_2"],
+                fg=color,
+                width=3,
+                height=1,
+                font=(FONT_SEMIBOLD, 13),
+                pady=5,
+            ).pack(side="left", padx=(0, 11))
+            self._section_title(card_header, title).pack(side="left", anchor="w")
+            self._muted(panel, description, wraplength=380).pack(anchor="w", pady=(5, 12))
+            ttk.Button(
+                panel,
+                text="Abrir",
+                style="Accent.TButton",
+                command=lambda page_key=target: self.abrir_central_midia(page_key),
+            ).pack(anchor="e")
+
+        ResponsiveGrid(
+            actions,
+            action_cards,
+            breakpoints=((650, 2), (0, 1)),
+            gap=14,
+            uniform="media_actions",
+        )
 
 
     # ========================================================
@@ -1152,13 +1808,13 @@ class MLDForwarderGUI(tk.Tk):
         pady=16
     ):
 
-        return tk.Frame(
+        return RoundedPanel(
             parent,
-            bg=COLORS["panel"],
-            highlightbackground=COLORS["line"],
-            highlightthickness=1,
             padx=padx,
-            pady=pady
+            pady=pady,
+            fg_color=COLORS["panel"],
+            border_color=COLORS["line_soft"],
+            corner_radius=9,
         )
 
 
@@ -1168,12 +1824,14 @@ class MLDForwarderGUI(tk.Tk):
         texto
     ):
 
-        return tk.Label(
+        return ctk.CTkLabel(
             parent,
             text=texto,
-            bg=COLORS["panel"],
-            fg=COLORS["text"],
-            font=("Segoe UI", 11, "bold")
+            fg_color="transparent",
+            text_color=COLORS["text"],
+            font=(FONT_SEMIBOLD, 16),
+            height=24,
+            anchor="w",
         )
 
 
@@ -1185,7 +1843,7 @@ class MLDForwarderGUI(tk.Tk):
         wraplength=800
     ):
 
-        return tk.Label(
+        label = tk.Label(
             parent,
             text=texto,
             textvariable=textvariable,
@@ -1194,8 +1852,10 @@ class MLDForwarderGUI(tk.Tk):
             justify="left",
             anchor="w",
             wraplength=wraplength,
-            font=("Segoe UI", 9)
+            font=(FONT, 10)
         )
+        bind_responsive_wrap(label, parent, wraplength)
+        return label
 
 
     def _card(
@@ -1206,26 +1866,37 @@ class MLDForwarderGUI(tk.Tk):
         cor=None
     ):
 
-        frame = self._panel(
-            parent,
+        accent_color = cor or COLORS["accent"]
+        frame = self._panel(parent, padx=0, pady=0)
+
+        tk.Frame(
+            frame,
+            bg=accent_color,
+            height=3,
+        ).pack(fill="x")
+
+        body = tk.Frame(
+            frame,
+            bg=COLORS["panel"],
             padx=16,
-            pady=14
+            pady=14,
         )
+        body.pack(fill="both", expand=True)
 
         tk.Label(
-            frame,
+            body,
             text=titulo.upper(),
             bg=COLORS["panel"],
-            fg=COLORS["muted"],
-            font=("Segoe UI", 8, "bold")
+            fg=COLORS["subtle"],
+            font=(FONT_SEMIBOLD, 9)
         ).pack(anchor="w")
 
         label = tk.Label(
-            frame,
+            body,
             textvariable=variavel,
             bg=COLORS["panel"],
-            fg=cor or COLORS["text"],
-            font=("Segoe UI", 13, "bold")
+            fg=COLORS["text"],
+            font=(FONT_SEMIBOLD, 17)
         )
         label.pack(
             anchor="w",
@@ -1266,65 +1937,24 @@ class MLDForwarderGUI(tk.Tk):
             bg=COLORS["bg"]
         )
         cards.pack(fill="x")
-
-        card1, _ = self._card(
-            cards,
-            "Telegram",
-            self.telegram_status_var
-        )
-        card1.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=(0, 5)
+        card_specs = (
+            ("Telegram", self.telegram_status_var, COLORS["accent"]),
+            ("Rotas", self.qtd_canais_var, COLORS["purple"]),
+            ("Normal", self.normal_status_var, COLORS["success"]),
+            ("Retroativo", self.retro_status_var, COLORS["warning"]),
+            ("Pendências", self.pendencias_var, COLORS["danger"]),
         )
 
-        card2, _ = self._card(
+        dashboard_cards = []
+        for title, variable, color in card_specs:
+            card, _ = self._card(cards, title, variable, color)
+            dashboard_cards.append(card)
+        ResponsiveGrid(
             cards,
-            "Rotas",
-            self.qtd_canais_var
-        )
-        card2.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=5
-        )
-
-        card3, _ = self._card(
-            cards,
-            "Normal",
-            self.normal_status_var
-        )
-        card3.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=5
-        )
-
-        card4, _ = self._card(
-            cards,
-            "Retroativo",
-            self.retro_status_var
-        )
-        card4.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=5
-        )
-
-        card5, _ = self._card(
-            cards,
-            "Pendências",
-            self.pendencias_var
-        )
-        card5.pack(
-            side="left",
-            fill="x",
-            expand=True,
-            padx=(5, 0)
+            dashboard_cards,
+            breakpoints=((860, 5), (600, 3), (0, 2)),
+            gap=10,
+            uniform="dashboard_cards",
         )
 
         engine = self._panel(
@@ -1345,12 +1975,102 @@ class MLDForwarderGUI(tk.Tk):
         self._muted(
             engine,
             (
-                "Mantém todas as rotas configuradas sincronizadas "
-                "continuamente. Rotas novas começam no ID mais recente."
+                "Mantém as rotas selecionadas sincronizadas continuamente. "
+                "Rotas novas começam no ID mais recente."
             )
         ).pack(
             anchor="w",
-            pady=(4, 14)
+            pady=(4, 12)
+        )
+
+        route_header = tk.Frame(
+            engine,
+            bg=COLORS["panel"]
+        )
+        route_header.pack(fill="x")
+
+        self._form_label(
+            route_header,
+            "Rotas desta execução"
+        ).pack(side="left")
+
+        route_buttons = tk.Frame(
+            route_header,
+            bg=COLORS["panel"]
+        )
+        route_buttons.pack(side="right")
+
+        self.select_all_normal_button = ttk.Button(
+            route_buttons,
+            text="Selecionar todas",
+            command=self.selecionar_todas_rotas_normais
+        )
+        self.select_all_normal_button.pack(side="left")
+
+        self.clear_normal_selection_button = ttk.Button(
+            route_buttons,
+            text="Limpar seleção",
+            command=self.limpar_selecao_rotas_normais
+        )
+        self.clear_normal_selection_button.pack(
+            side="left",
+            padx=(8, 0)
+        )
+
+        route_list_holder = tk.Frame(
+            engine,
+            bg=COLORS["line"],
+            padx=1,
+            pady=1
+        )
+        route_list_holder.pack(
+            fill="x",
+            pady=(8, 4)
+        )
+
+        self.normal_route_list = tk.Listbox(
+            route_list_holder,
+            selectmode="multiple",
+            exportselection=False,
+            activestyle="none",
+            height=5,
+            bg=COLORS["panel_2"],
+            fg=COLORS["text"],
+            selectbackground=COLORS["accent"],
+            selectforeground=COLORS["text"],
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            font=("Segoe UI", 10)
+        )
+        self.normal_route_list.pack(
+            side="left",
+            fill="x",
+            expand=True
+        )
+
+        route_scrollbar = ttk.Scrollbar(
+            route_list_holder,
+            orient="vertical",
+            command=self.normal_route_list.yview
+        )
+        route_scrollbar.pack(
+            side="right",
+            fill="y"
+        )
+        self.normal_route_list.configure(
+            yscrollcommand=route_scrollbar.set
+        )
+
+        self._muted(
+            engine,
+            (
+                "Clique para marcar ou desmarcar rotas. É possível iniciar "
+                "uma, várias ou todas na mesma execução."
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 12)
         )
 
         actions = tk.Frame(
@@ -1510,6 +2230,7 @@ class MLDForwarderGUI(tk.Tk):
             "topico_origem",
             "destino",
             "topico_destino",
+            "transferencia",
             "normal",
             "retro",
             "falhas"
@@ -1528,20 +2249,22 @@ class MLDForwarderGUI(tk.Tk):
             "topico_origem": "Tópico origem",
             "destino": "Destino",
             "topico_destino": "Tópico destino",
+            "transferencia": "Transferência",
             "normal": "Último ID normal",
             "retro": "Último ID retro",
             "falhas": "Pendências",
         }
 
         widths = {
-            "nome": 170,
-            "origem": 170,
-            "topico_origem": 95,
-            "destino": 150,
-            "topico_destino": 100,
-            "normal": 115,
-            "retro": 115,
-            "falhas": 80,
+            "nome": 150,
+            "origem": 145,
+            "topico_origem": 85,
+            "destino": 135,
+            "topico_destino": 85,
+            "transferencia": 110,
+            "normal": 95,
+            "retro": 95,
+            "falhas": 70,
         }
 
         for col in cols:
@@ -1776,7 +2499,7 @@ class MLDForwarderGUI(tk.Tk):
             textvariable=self.retro_progress_text_var,
             bg=COLORS["panel"],
             fg=COLORS["muted"],
-            font=("Segoe UI", 9)
+            font=("Segoe UI", 10)
         ).pack(side="right")
 
         self.retro_progress = ttk.Progressbar(
@@ -1890,7 +2613,7 @@ class MLDForwarderGUI(tk.Tk):
             fg=COLORS["success"],
             activeforeground=COLORS["success_hover"],
             cursor="hand2",
-            font=("Segoe UI", 9, "underline"),
+            font=("Segoe UI", 10, "underline"),
             takefocus=True
         )
         api_link.grid(
@@ -2185,7 +2908,7 @@ class MLDForwarderGUI(tk.Tk):
         self._muted(
             normal,
             (
-                "Estas opções controlam como o MLDForwarder procura e processa "
+                "Estas opções controlam como o MLD Tools procura e processa "
                 "mensagens novas. Os valores padrão funcionam bem na maioria dos casos."
             )
         ).grid(
@@ -2277,6 +3000,190 @@ class MLDForwarderGUI(tk.Tk):
             weight=1
         )
 
+        storage = self._panel(
+            page,
+            padx=20,
+            pady=18
+        )
+        storage.pack(
+            fill="x",
+            pady=(16, 0)
+        )
+
+        self._section_title(
+            storage,
+            "Armazenamento temporário"
+        ).grid(
+            row=0,
+            column=0,
+            columnspan=3,
+            sticky="w"
+        )
+
+        self._muted(
+            storage,
+            (
+                "Escolha onde o programa pode guardar downloads antes do "
+                "reenvio. Somente a subpasta temp_transferencias será "
+                "administrada pelo MLD Tools."
+            )
+        ).grid(
+            row=1,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(4, 14)
+        )
+
+        self.temp_parent_var = tk.StringVar()
+        self.temp_limit_gb_var = tk.StringVar()
+        self.temp_path_var = tk.StringVar()
+        self.temp_space_var = tk.StringVar()
+
+        self._form_label(
+            storage,
+            "Pasta-pai"
+        ).grid(
+            row=2,
+            column=0,
+            sticky="w",
+            pady=7
+        )
+
+        temp_entry = ttk.Entry(
+            storage,
+            textvariable=self.temp_parent_var,
+            width=55
+        )
+        temp_entry.grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            padx=(14, 8),
+            pady=7
+        )
+        temp_entry.bind(
+            "<FocusOut>",
+            lambda _event: self.atualizar_status_temporario()
+        )
+
+        ttk.Button(
+            storage,
+            text="Procurar...",
+            command=self.escolher_pasta_temporaria
+        ).grid(
+            row=2,
+            column=2,
+            sticky="e",
+            pady=7
+        )
+
+        temp_path_label = self._field_description(
+            storage,
+            ""
+        )
+        temp_path_label.configure(
+            textvariable=self.temp_path_var
+        )
+        temp_path_label.grid(
+            row=3,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(0, 8)
+        )
+
+        self._form_label(
+            storage,
+            "Limite temporário (GB)"
+        ).grid(
+            row=4,
+            column=0,
+            sticky="w",
+            pady=7
+        )
+
+        temp_limit_entry = ttk.Entry(
+            storage,
+            textvariable=self.temp_limit_gb_var,
+            width=22
+        )
+        temp_limit_entry.grid(
+            row=4,
+            column=1,
+            sticky="w",
+            padx=(14, 0),
+            pady=7
+        )
+        temp_limit_entry.bind(
+            "<FocusOut>",
+            lambda _event: self.atualizar_status_temporario()
+        )
+
+        self._field_description(
+            storage,
+            (
+                "Use 0 para não impor um teto adicional. O espaço livre do "
+                "disco sempre será verificado antes do download."
+            )
+        ).grid(
+            row=5,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(0, 8)
+        )
+
+        temp_status = self._field_description(
+            storage,
+            ""
+        )
+        temp_status.configure(
+            textvariable=self.temp_space_var
+        )
+        temp_status.grid(
+            row=6,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            pady=(0, 12)
+        )
+
+        botoes_temp = tk.Frame(
+            storage,
+            bg=COLORS["panel"]
+        )
+        botoes_temp.grid(
+            row=7,
+            column=0,
+            columnspan=3,
+            sticky="ew"
+        )
+
+        ttk.Button(
+            botoes_temp,
+            text="Usar pasta do programa",
+            command=self.usar_pasta_temporaria_padrao
+        ).pack(side="left")
+
+        ttk.Button(
+            botoes_temp,
+            text="Atualizar espaço",
+            command=self.atualizar_status_temporario
+        ).pack(
+            side="left",
+            padx=(8, 0)
+        )
+
+        ttk.Button(
+            botoes_temp,
+            text="Limpar temporários",
+            style="Danger.TButton",
+            command=self.limpar_temporarios
+        ).pack(side="right")
+
+        storage.columnconfigure(1, weight=1)
+
 
     def _form_label(
         self,
@@ -2284,13 +3191,14 @@ class MLDForwarderGUI(tk.Tk):
         texto
     ):
 
-        return tk.Label(
+        label = tk.Label(
             parent,
             text=texto,
             bg=COLORS["panel"],
             fg=COLORS["text"],
-            font=("Segoe UI", 9)
+            font=(FONT, 10)
         )
+        return label
 
 
     def _field_description(
@@ -2299,16 +3207,175 @@ class MLDForwarderGUI(tk.Tk):
         texto
     ):
 
-        return tk.Label(
+        label = tk.Label(
             parent,
             text=texto,
             bg=COLORS["panel"],
             fg=COLORS["muted"],
-            font=("Segoe UI", 9),
+            font=(FONT, 10),
             justify="left",
             anchor="w",
             wraplength=760
         )
+        bind_responsive_wrap(label, parent, 760)
+        return label
+
+
+    def _config_temporaria_da_interface(self):
+        pasta_pai = resolver_temp_parent_dir(
+            self.temp_parent_var.get()
+        )
+
+        if not pasta_pai.exists() or not pasta_pai.is_dir():
+            raise ValueError(
+                f"A pasta-pai temporária não existe: {pasta_pai}"
+            )
+
+        try:
+            limite_gb = float(
+                self.temp_limit_gb_var.get().strip().replace(",", ".")
+                or "0"
+            )
+        except ValueError as erro:
+            raise ValueError(
+                "O limite temporário precisa ser um número."
+            ) from erro
+
+        if not math.isfinite(limite_gb) or limite_gb < 0:
+            raise ValueError(
+                "O limite temporário precisa ser zero ou um número positivo."
+            )
+
+        pasta_salva = (
+            ""
+            if pasta_pai == BASE_DIR.resolve()
+            else str(pasta_pai)
+        )
+
+        return {
+            "temp_parent_dir": pasta_salva,
+            "limite_temporario_gb": limite_gb,
+        }
+
+
+    def atualizar_status_temporario(self):
+        try:
+            config = self._config_temporaria_da_interface()
+            configurar_armazenamento_temporario(config)
+            estado = estado_armazenamento_temporario()
+
+            self.temp_path_var.set(
+                f"Arquivos administrados em: {estado['pasta']}"
+            )
+
+            limite = (
+                formatar_tamanho(estado["limite"])
+                if estado["limite"] > 0
+                else "sem teto adicional"
+            )
+            self.temp_space_var.set(
+                f"Arquivos: {estado['arquivos']}  |  "
+                f"Em uso: {formatar_tamanho(estado['uso'])}  |  "
+                f"Livre no disco: {formatar_tamanho(estado['livre'])}  |  "
+                f"Limite: {limite}"
+            )
+            return True
+
+        except Exception as erro:
+            self.temp_path_var.set(
+                "Arquivos administrados em: —"
+            )
+            self.temp_space_var.set(
+                f"Não foi possível consultar o armazenamento: {erro}"
+            )
+            return False
+
+
+    def escolher_pasta_temporaria(self):
+        atual = resolver_temp_parent_dir(
+            self.temp_parent_var.get()
+        )
+
+        if not atual.exists():
+            atual = BASE_DIR
+
+        escolhida = filedialog.askdirectory(
+            parent=self,
+            title="Escolher pasta-pai para temporários",
+            initialdir=str(atual),
+            mustexist=True
+        )
+
+        if not escolhida:
+            return
+
+        self.temp_parent_var.set(escolhida)
+        self.atualizar_status_temporario()
+
+
+    def usar_pasta_temporaria_padrao(self):
+        self.temp_parent_var.set(str(BASE_DIR.resolve()))
+        self.atualizar_status_temporario()
+
+
+    def limpar_temporarios(self):
+        if self._processo_em_execucao():
+            messagebox.showwarning(
+                "Temporários em uso",
+                (
+                    "Pare a sincronização normal ou retroativa antes de "
+                    "limpar os arquivos temporários."
+                )
+            )
+            return
+
+        try:
+            config = self._config_temporaria_da_interface()
+            configurar_armazenamento_temporario(config)
+            estado = estado_armazenamento_temporario()
+        except Exception as erro:
+            messagebox.showerror(
+                "Armazenamento temporário",
+                str(erro)
+            )
+            return
+
+        if estado["arquivos"] <= 0:
+            messagebox.showinfo(
+                "Armazenamento temporário",
+                "Não há arquivos temporários para remover."
+            )
+            return
+
+        if not messagebox.askyesno(
+            "Limpar temporários",
+            (
+                f"Remover {formatar_tamanho(estado['uso'])} de:\n\n"
+                f"{estado['pasta']}\n\n"
+                "Downloads parciais e arquivos aguardando nova tentativa "
+                "serão perdidos. Continuar?"
+            )
+        ):
+            return
+
+        try:
+            removidos = limpar_armazenamento_temporario()
+            self.atualizar_status_temporario()
+            self.log(
+                f"[CONFIG] Temporários removidos: "
+                f"{formatar_tamanho(removidos)}.",
+                "warning"
+            )
+            messagebox.showinfo(
+                "Armazenamento temporário",
+                f"Foram removidos {formatar_tamanho(removidos)}."
+            )
+
+        except Exception as erro:
+            messagebox.showerror(
+                "Limpeza cancelada",
+                str(erro)
+            )
 
 
     # ========================================================
@@ -2348,17 +3415,17 @@ class MLDForwarderGUI(tk.Tk):
 
         self.log_text = tk.Text(
             holder,
-            bg="#111719",
+            bg=COLORS["sidebar"],
             fg=COLORS["text"],
             insertbackground=COLORS["text"],
             selectbackground=COLORS["accent"],
-            selectforeground="#111111",
+            selectforeground=COLORS["text"],
             relief="flat",
             borderwidth=0,
             padx=14,
             pady=12,
             wrap="word",
-            font=("Cascadia Mono", 9),
+            font=("Cascadia Mono", 10),
             state="disabled"
         )
 
@@ -2484,6 +3551,11 @@ class MLDForwarderGUI(tk.Tk):
                     data.get("topic_id") or "—",
                     data.get("target_id", ""),
                     data.get("target_topic_id") or "—",
+                    (
+                        "Baixar + reupar"
+                        if data.get("download_reupload", False)
+                        else "Direta"
+                    ),
                     normal_id,
                     retro_id,
                     falhas
@@ -2498,6 +3570,7 @@ class MLDForwarderGUI(tk.Tk):
             str(total_falhas)
         )
 
+        self._atualizar_normal_lista()
         self._atualizar_retro_combo()
 
 
@@ -2521,6 +3594,100 @@ class MLDForwarderGUI(tk.Tk):
         return value
 
 
+    def _rotulo_rota(self, chave_rota, data):
+        nome = data.get(
+            "name",
+            chave_rota
+        )
+        origem = data.get(
+            "source_id",
+            chave_rota
+        )
+        topico_id = data.get(
+            "topic_id"
+        )
+        destino = data.get(
+            "target_id",
+            ""
+        )
+        topico_destino_id = data.get(
+            "target_topic_id"
+        )
+
+        if topico_id is None:
+            label = f"{nome} — {origem}"
+        else:
+            label = (
+                f"{nome} — {origem} "
+                f"[tópico {topico_id}]"
+            )
+
+        label += f" > {destino}"
+
+        if topico_destino_id is not None:
+            label += f" [tópico {topico_destino_id}]"
+
+        return label
+
+
+    def rotas_normais_selecionadas(self):
+        return [
+            self.normal_route_keys[indice]
+            for indice in self.normal_route_list.curselection()
+            if indice < len(self.normal_route_keys)
+        ]
+
+
+    def selecionar_todas_rotas_normais(self):
+        self.normal_route_list.selection_set(
+            0,
+            "end"
+        )
+
+
+    def limpar_selecao_rotas_normais(self):
+        self.normal_route_list.selection_clear(
+            0,
+            "end"
+        )
+
+
+    def _atualizar_normal_lista(self):
+        selecionadas = set(
+            self.rotas_normais_selecionadas()
+        )
+        selecionar_todas = (
+            not self.normal_selection_initialized
+            or not self.normal_route_keys
+            or len(selecionadas) == len(self.normal_route_keys)
+        )
+        estado_anterior = self.normal_route_list.cget(
+            "state"
+        )
+
+        self.normal_route_list.configure(state="normal")
+        self.normal_route_list.delete(0, "end")
+        self.normal_route_keys = []
+
+        for chave_rota, data in self.channels.items():
+            indice = len(self.normal_route_keys)
+            self.normal_route_keys.append(
+                str(chave_rota)
+            )
+            self.normal_route_list.insert(
+                "end",
+                self._rotulo_rota(chave_rota, data)
+            )
+
+            if selecionar_todas or str(chave_rota) in selecionadas:
+                self.normal_route_list.selection_set(indice)
+
+        self.normal_selection_initialized = True
+        self.normal_route_list.configure(
+            state=estado_anterior
+        )
+
+
     def _atualizar_retro_combo(self):
 
         values = [
@@ -2534,38 +3701,10 @@ class MLDForwarderGUI(tk.Tk):
         for chave_rota, data in (
             self.channels.items()
         ):
-            nome = data.get(
-                "name",
-                chave_rota
+            label = self._rotulo_rota(
+                chave_rota,
+                data
             )
-
-            origem = data.get(
-                "source_id",
-                chave_rota
-            )
-            topico_id = data.get(
-                "topic_id"
-            )
-            destino = data.get(
-                "target_id",
-                ""
-            )
-            topico_destino_id = data.get(
-                "target_topic_id"
-            )
-
-            if topico_id is None:
-                label = f"{nome} — {origem}"
-            else:
-                label = (
-                    f"{nome} — {origem} "
-                    f"[tópico {topico_id}]"
-                )
-
-            label += f" > {destino}"
-
-            if topico_destino_id is not None:
-                label += f" [tópico {topico_destino_id}]"
 
             values.append(
                 label
@@ -2604,6 +3743,16 @@ class MLDForwarderGUI(tk.Tk):
         self.session_var.set(
             app["session_file"]
         )
+        self.temp_parent_var.set(
+            str(
+                resolver_temp_parent_dir(
+                    app.get("temp_parent_dir", "")
+                )
+            )
+        )
+        self.temp_limit_gb_var.set(
+            f"{app.get('limite_temporario_gb', 0):g}"
+        )
 
         self.normal_batch_var.set(
             str(
@@ -2636,6 +3785,8 @@ class MLDForwarderGUI(tk.Tk):
                 retro["tentativas_erro"]
             )
         )
+
+        self.atualizar_status_temporario()
 
 
     # ========================================================
@@ -2672,6 +3823,10 @@ class MLDForwarderGUI(tk.Tk):
             "target_id": item["target_id"],
             "topic_id": item.get("topic_id"),
             "target_topic_id": item.get("target_topic_id"),
+            "download_reupload": item.get(
+                "download_reupload",
+                False
+            ),
             "name": item["name"]
         }
 
@@ -2735,6 +3890,10 @@ class MLDForwarderGUI(tk.Tk):
                 "target_topic_id": old.get(
                     "target_topic_id"
                 ),
+                "download_reupload": old.get(
+                    "download_reupload",
+                    False
+                ),
                 "name": old.get(
                     "name",
                     ""
@@ -2774,6 +3933,10 @@ class MLDForwarderGUI(tk.Tk):
             "target_id": item["target_id"],
             "topic_id": item.get("topic_id"),
             "target_topic_id": item.get("target_topic_id"),
+            "download_reupload": item.get(
+                "download_reupload",
+                False
+            ),
             "name": item["name"]
         }
 
@@ -2955,12 +4118,9 @@ class MLDForwarderGUI(tk.Tk):
             }
         )
 
-        salvar_json(
-            APP_CONFIG_FILE,
-            {
-                "session_file": session
-            }
-        )
+        app = carregar_config_app()
+        app["session_file"] = session
+        salvar_json(APP_CONFIG_FILE, app)
 
         if not silencioso:
             self.log(
@@ -2979,6 +4139,18 @@ class MLDForwarderGUI(tk.Tk):
         self,
         silencioso=False
     ):
+
+        try:
+            config_temporaria = (
+                self._config_temporaria_da_interface()
+            )
+        except ValueError as erro:
+            if not silencioso:
+                messagebox.showerror(
+                    "Configuração inválida",
+                    str(erro)
+                )
+            return False
 
         try:
             normal_batch = int(
@@ -3040,6 +4212,12 @@ class MLDForwarderGUI(tk.Tk):
                 "tentativas_erro": retro_attempts
             }
         )
+
+        app = carregar_config_app()
+        app.update(config_temporaria)
+        salvar_json(APP_CONFIG_FILE, app)
+        configurar_armazenamento_temporario(app)
+        self.atualizar_status_temporario()
 
         if not silencioso:
             self.log(
@@ -3592,6 +4770,54 @@ class MLDForwarderGUI(tk.Tk):
         )
 
 
+    def media_active(self):
+
+        return (
+            self.media_process is not None
+            and self.media_process.poll() is None
+        )
+
+
+    def abrir_central_midia(self, page="dashboard"):
+
+        if self.media_active():
+            messagebox.showinfo(
+                "Central de mídia",
+                "A Central de mídia já está aberta em outra janela.",
+            )
+            return
+
+        if getattr(sys, "frozen", False):
+            executable = BASE_DIR / "MLDToolsMedia.exe"
+            if not executable.exists():
+                messagebox.showerror(
+                    "Central de mídia",
+                    "MLDToolsMedia.exe não foi encontrado na pasta do MLD Tools.",
+                )
+                return
+            command = [str(executable), "--page", page]
+        else:
+            command = [sys.executable, str(BASE_DIR / "media_app.py"), "--page", page]
+
+        environment = os.environ.copy()
+        environment["MLDTOOLS_APP_ROOT"] = str(BASE_DIR)
+        if getattr(sys, "frozen", False):
+            environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+
+        try:
+            self.media_process = subprocess.Popen(
+                command,
+                cwd=str(BASE_DIR),
+                env=environment,
+            )
+        except OSError as exc:
+            self.media_process = None
+            messagebox.showerror(
+                "Central de mídia",
+                f"Não foi possível abrir a Central de mídia.\n\n{exc}",
+            )
+
+
     def _processo_em_execucao(self):
 
         return (
@@ -3650,13 +4876,13 @@ class MLDForwarderGUI(tk.Tk):
             if frozen:
                 engine = (
                     BASE_DIR
-                    / "MLDForwarderSync.exe"
+                    / "MLDToolsSync.exe"
                 )
 
                 if not engine.exists():
                     raise RuntimeError(
-                        "MLDForwarderSync.exe não foi encontrado "
-                        "na pasta do MLDForwarder."
+                        "MLDToolsSync.exe não foi encontrado "
+                        "na pasta do MLD Tools."
                     )
 
                 return [
@@ -3677,13 +4903,13 @@ class MLDForwarderGUI(tk.Tk):
             if frozen:
                 engine = (
                     BASE_DIR
-                    / "MLDForwarderRetro.exe"
+                    / "MLDToolsRetro.exe"
                 )
 
                 if not engine.exists():
                     raise RuntimeError(
-                        "MLDForwarderRetro.exe não foi encontrado "
-                        "na pasta do MLDForwarder."
+                        "MLDToolsRetro.exe não foi encontrado "
+                        "na pasta do MLD Tools."
                     )
 
                 return [
@@ -3912,6 +5138,7 @@ class MLDForwarderGUI(tk.Tk):
 
         if kind == "normal":
             self.normal_process = None
+            self.normal_active_count = 0
         else:
             self.retro_process = None
             self.retro_progress.stop()
@@ -3956,6 +5183,20 @@ class MLDForwarderGUI(tk.Tk):
         if not self._validar_execucao():
             return
 
+        rotas_selecionadas = (
+            self.rotas_normais_selecionadas()
+        )
+
+        if not rotas_selecionadas:
+            messagebox.showerror(
+                "Selecionar rotas",
+                (
+                    "Marque pelo menos uma rota para iniciar "
+                    "o sincronizador normal."
+                )
+            )
+            return
+
         if not self.salvar_configuracoes(
             silencioso=True
         ):
@@ -3979,6 +5220,17 @@ class MLDForwarderGUI(tk.Tk):
             "accent"
         )
         self.log(
+            (
+                "Seleção: Todas as rotas"
+                if len(rotas_selecionadas) == len(self.channels)
+                else (
+                    f"Seleção: {len(rotas_selecionadas)} de "
+                    f"{len(self.channels)} rotas"
+                )
+            ),
+            "accent"
+        )
+        self.log(
             "=" * 64,
             "accent"
         )
@@ -3988,9 +5240,14 @@ class MLDForwarderGUI(tk.Tk):
                 "normal"
             )
 
+            for chave_rota in rotas_selecionadas:
+                command.append(
+                    f"--canal={chave_rota}"
+                )
+
         except RuntimeError as error:
             messagebox.showerror(
-                "MLDForwarder",
+                "MLD Tools",
                 str(error)
             )
             return
@@ -4002,6 +5259,9 @@ class MLDForwarderGUI(tk.Tk):
 
         if process:
             self.normal_process = process
+            self.normal_active_count = len(
+                rotas_selecionadas
+            )
             self.atualizar_estados()
 
 
@@ -4085,7 +5345,7 @@ class MLDForwarderGUI(tk.Tk):
 
         except RuntimeError as error:
             messagebox.showerror(
-                "MLDForwarder",
+                "MLD Tools",
                 str(error)
             )
             return
@@ -4187,7 +5447,11 @@ class MLDForwarderGUI(tk.Tk):
 
         if normal:
             self.normal_status_var.set(
-                "Ativo"
+                (
+                    f"Ativo ({self.normal_active_count})"
+                    if self.normal_active_count
+                    else "Ativo"
+                )
             )
             self.sidebar_engine_var.set(
                 "● Sincronizador ativo"
@@ -4239,6 +5503,28 @@ class MLDForwarderGUI(tk.Tk):
                 "normal"
                 if normal
                 else "disabled"
+            )
+        )
+
+        self.normal_route_list.configure(
+            state=(
+                "disabled"
+                if normal or retro
+                else "normal"
+            )
+        )
+        self.select_all_normal_button.configure(
+            state=(
+                "disabled"
+                if normal or retro
+                else "normal"
+            )
+        )
+        self.clear_normal_selection_button.configure(
+            state=(
+                "disabled"
+                if normal or retro
+                else "normal"
             )
         )
 
@@ -4313,10 +5599,17 @@ class MLDForwarderGUI(tk.Tk):
 
     def fechar(self):
 
+        if self.media_active():
+            messagebox.showinfo(
+                "Central de mídia aberta",
+                "Feche a janela da Central de mídia antes de encerrar o MLD Tools.",
+            )
+            return
+
         if self._processo_em_execucao():
 
             if not messagebox.askyesno(
-                "Encerrar MLDForwarder",
+                "Encerrar MLD Tools",
                 (
                     "Há uma sincronização em andamento.\n\n"
                     "Solicitar a parada e fechar a interface?"
@@ -4336,10 +5629,11 @@ class MLDForwarderGUI(tk.Tk):
                     encoding="utf-8"
                 )
 
+        self._save_window_placement()
         self.destroy()
 
 
 if __name__ == "__main__":
 
-    app = MLDForwarderGUI()
+    app = MLDToolsGUI()
     app.mainloop()
