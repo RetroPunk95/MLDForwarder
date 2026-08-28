@@ -40,9 +40,10 @@ As credenciais que estavam no armazenamento comum da versão alpha são migradas
 automaticamente para dados cifrados na primeira abertura da nova versão. A
 senha 2FA e o código de login não são armazenados.
 
-APKs de depuração produzidos por execuções diferentes do GitHub Actions podem
-usar assinaturas distintas. Caso o Android recuse a atualização, desinstale o
-alpha antes de instalar o RC. Isso apaga a sessão e exige um novo login.
+O build de teste usa o identificador `com.retropunk.mldforwarder.rc` e o nome
+**MLDForwarder RC**. Ele pode ser instalado ao lado do alpha aprovado sem
+substituir o aplicativo, a sessão ou as rotas atuais. Por ser uma instalação
+separada, o RC exige um novo login no Telegram.
 
 ## Compilar
 
