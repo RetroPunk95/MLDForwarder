@@ -41,7 +41,7 @@ escala legível no Windows.
 
 ## Download
 
-Baixe a versão mais recente na página de [Releases](../../releases/latest).
+Baixe a versão mais recente na página de [Releases](https://github.com/RetroPunk95/MLDForwarder/releases).
 
 | Opção | Indicação |
 |---|---|
