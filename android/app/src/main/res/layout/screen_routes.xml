@@ -101,7 +101,7 @@
 
             <TextView style="@style/CardTitle" android:text="Sincronização retroativa" />
             <TextView style="@style/SectionHint" android:layout_marginTop="4dp" android:text="Controle quantas mensagens antigas serão buscadas nesta rota." />
-            <TextView style="@style/FieldLabel" android:text="LIMITE DE MENSAGENS" />
+            <TextView style="@style/FieldLabel" android:text="LIMITE DE MENSAGENS · MÍNIMO 1" />
             <EditText android:id="@+id/retroLimitInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="100" android:inputType="number" />
             <TextView style="@style/FieldLabel" android:text="ID INICIAL · 0 PARA AUTOMÁTICO" />
             <EditText android:id="@+id/retroStartIdInput" style="@style/InputField" android:layout_width="match_parent" android:layout_height="50dp" android:hint="0" android:inputType="number" />

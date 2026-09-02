@@ -35,7 +35,11 @@ public class MainActivity extends Activity {
     private final BroadcastReceiver logReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            appendLog(intent.getStringExtra(SyncService.EXTRA_LOG));
+            String message = intent.getStringExtra(SyncService.EXTRA_LOG);
+            appendLog(message);
+            if ("Sincronização encerrada.".equals(message)) {
+                updateServiceStatus(false, "");
+            }
         }
     };
 
@@ -410,8 +414,10 @@ public class MainActivity extends Activity {
     private void stopSync() {
         appendLog("Solicitando parada segura...");
         executor.execute(() -> PythonBridge.requestStop(getApplicationContext()));
-        stopService(new Intent(this, SyncService.class));
-        updateServiceStatus(false, "");
+        // O motor confirma a etapa em andamento e encerra o próprio serviço.
+        // Destruir o serviço aqui permitia reiniciar enquanto o Python ainda enviava.
+        serviceStatusText.setText("Encerrando com segurança...");
+        serviceStatusText.setTextColor(getColor(R.color.text_secondary));
     }
 
     private JSONObject routeJson() throws JSONException {

@@ -10,6 +10,7 @@ on:
       - "build.gradle"
       - "settings.gradle"
       - "gradle.properties"
+      - "tests/**"
       - ".github/workflows/android-build.yml"
 
 jobs:
@@ -37,6 +38,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
+
+      - name: Test synchronization engine offline
+        run: |
+          python -m pip install telethon==1.40.0
+          python -m unittest discover -s tests -v
 
       - name: Build unsigned release APK
         run: gradle :app:assembleRelease --stacktrace

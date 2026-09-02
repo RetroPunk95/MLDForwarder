@@ -6,21 +6,65 @@ parada cooperativa, retomada e encerramento seguro do serviço Android.
 """
 
 import asyncio
+import copy
+import hashlib
 import json
+import threading
+from functools import wraps
 from pathlib import Path
 
 from telethon import TelegramClient, utils
 from telethon.errors import (
+    DocumentInvalidError,
+    FileReferenceEmptyError,
+    FileReferenceExpiredError,
+    FileReferenceInvalidError,
     FloodWaitError,
+    MediaEmptyError,
+    MediaInvalidError,
     MediaCaptionTooLongError,
     PasswordHashInvalidError,
     PhoneCodeExpiredError,
     PhoneCodeInvalidError,
     PhoneNumberInvalidError,
+    PhotoInvalidError,
+    PremiumAccountRequiredError,
     SessionPasswordNeededError,
 )
 from telethon.tl.functions.channels import GetForumTopicsRequest
-from telethon.tl.types import MessageMediaWebPage
+from telethon.tl.types import MessageEntityCustomEmoji, MessageMediaWebPage
+
+from delivery_state import (
+    DeliveryContext, DeliveryJournal, DeliveryStopped,
+    DeliveryStorageError,
+)
+
+
+RECOVERABLE_MEDIA_ERRORS = (
+    DocumentInvalidError, FileReferenceEmptyError, FileReferenceExpiredError,
+    FileReferenceInvalidError, MediaEmptyError, MediaInvalidError,
+    PhotoInvalidError, PremiumAccountRequiredError,
+)
+
+
+class SourceMessageUnavailable(Exception):
+    pass
+
+
+_SYNC_LOCK = threading.Lock()
+
+
+def _single_sync(function):
+    @wraps(function)
+    def wrapped(raw_config, listener=None):
+        if not _SYNC_LOCK.acquire(blocking=False):
+            _emit(listener, "O motor anterior ainda está encerrando. Aguarde antes de iniciar novamente.")
+            return _result(ok=False, error="Sincronização já em execução.")
+        try:
+            return function(raw_config, listener)
+        finally:
+            _SYNC_LOCK.release()
+    return wrapped
 
 
 def _result(**values):
@@ -325,55 +369,72 @@ def _load_progress(cfg, filename):
 
 def _save_progress(path, progress):
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(progress, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    temporary.replace(path)
+    try:
+        temporary.write_text(
+            json.dumps(progress, indent=2, ensure_ascii=False), encoding="utf-8",
+        )
+        temporary.replace(path)
+    except OSError as error:
+        raise DeliveryStorageError("Falha ao salvar progresso; sincronização interrompida.") from error
 
 
-async def _send_text(client, target, text, entities, target_topic, link_preview=True):
+def _without_custom_emoji(entities):
+    # Não alterar o texto: o emoji Unicode já ocupa os offsets UTF-16 originais.
+    return [entity for entity in entities or [] if not isinstance(entity, MessageEntityCustomEmoji)]
+
+
+async def _send_text(client, target, text, entities, target_topic, context, key, link_preview=True):
     if not text:
         return
-    for part, part_entities in utils.split_text(text, entities or [], limit=4096):
-        await client.send_message(
-            target,
-            part,
-            formatting_entities=part_entities,
-            parse_mode=None,
-            link_preview=link_preview,
-            reply_to=target_topic,
-        )
+    for index, (part, part_entities) in enumerate(utils.split_text(text, entities or [], limit=4096)):
+        async def send():
+            return await client.send_message(
+                target, part, formatting_entities=part_entities, parse_mode=None,
+                link_preview=link_preview, reply_to=target_topic,
+            )
+        try:
+            await context.operation(f"{key}:{index}", send)
+        except (DocumentInvalidError, PremiumAccountRequiredError):
+            clean = _without_custom_emoji(part_entities)
+            if len(clean) == len(part_entities):
+                raise
+            context.log("Compatibilidade: tentando trecho de texto com emojis comuns; demais estilos mantidos.")
+            part_entities = clean
+            await context.operation(f"{key}:{index}", send)
 
 
-async def _send_message(client, route, message):
+async def _send_message(client, route, message, context):
     target = route["target"]
     target_topic = route["target_topic"]
 
     if isinstance(message.media, MessageMediaWebPage):
         webpage = getattr(message.media, "webpage", None)
         text = message.message or getattr(webpage, "url", "") or getattr(webpage, "display_url", "")
-        await _send_text(client, target, text, message.entities or [], target_topic, True)
+        await _send_text(client, target, text, message.entities or [], target_topic, context, "text", True)
         return
 
     if message.media:
-        try:
-            await client.send_file(
-                target,
-                message.media,
-                caption=message.message or "",
-                formatting_entities=message.entities or [],
-                parse_mode=None,
-                reply_to=target_topic,
-            )
-        except MediaCaptionTooLongError:
-            await client.send_file(target, message.media, caption="", reply_to=target_topic)
+        if not context.entry["split_caption"]:
+            try:
+                await context.operation("media", lambda: client.send_file(
+                    target, message.media, caption=message.message or "",
+                    formatting_entities=message.entities or [], parse_mode=None,
+                    reply_to=target_topic,
+                ))
+            except MediaCaptionTooLongError:
+                context.journal.update(context.entry, split_caption=True)
+        if context.entry["split_caption"]:
+            await context.operation("media", lambda: client.send_file(
+                target, message.media, caption="", parse_mode=None, reply_to=target_topic,
+            ))
             await _send_text(
                 client,
                 target,
                 message.message or "",
                 message.entities or [],
                 target_topic,
+                context,
+                "caption",
                 False,
             )
         return
@@ -384,11 +445,13 @@ async def _send_message(client, route, message):
         message.message or "",
         message.entities or [],
         target_topic,
+        context,
+        "text",
         True,
     )
 
 
-async def _send_album(client, route, messages):
+async def _send_album(client, route, messages, context):
     media_messages = [
         message
         for message in messages
@@ -397,27 +460,26 @@ async def _send_album(client, route, messages):
     if not media_messages:
         return
     if len(media_messages) == 1:
-        await _send_message(client, route, media_messages[0])
+        await _send_message(client, route, media_messages[0], context)
         return
 
     files = [message.media for message in media_messages]
     captions = [message.message or "" for message in media_messages]
     entities = [message.entities or [] for message in media_messages]
-    try:
-        await client.send_file(
-            route["target"],
-            files,
-            caption=captions,
-            formatting_entities=entities,
-            parse_mode=None,
+    if not context.entry["split_caption"]:
+        try:
+            await context.operation("album", lambda: client.send_file(
+                route["target"], files, caption=captions, formatting_entities=entities,
+                parse_mode=None, reply_to=route["target_topic"],
+            ))
+        except MediaCaptionTooLongError:
+            context.journal.update(context.entry, split_caption=True)
+    if context.entry["split_caption"]:
+        await context.operation("album", lambda: client.send_file(
+            route["target"], files, caption=[""] * len(files),
+            formatting_entities=[[] for _ in files], parse_mode=None,
             reply_to=route["target_topic"],
-        )
-    except MediaCaptionTooLongError:
-        await client.send_file(
-            route["target"],
-            files,
-            reply_to=route["target_topic"],
-        )
+        ))
         for message in media_messages:
             await _send_text(
                 client,
@@ -425,6 +487,8 @@ async def _send_album(client, route, messages):
                 message.message or "",
                 message.entities or [],
                 route["target_topic"],
+                context,
+                f"caption:{message.id}",
                 False,
             )
 
@@ -447,7 +511,7 @@ def _groups(messages):
     return result
 
 
-async def _collect(client, route, min_id, limit):
+async def _collect(client, route, min_id, limit, cfg=None):
     messages = []
     async for message in client.iter_messages(
         route["source"],
@@ -456,6 +520,8 @@ async def _collect(client, route, min_id, limit):
         reverse=True,
         reply_to=route["source_topic"],
     ):
+        if cfg is not None and _stop_requested(cfg):
+            raise DeliveryStopped()
         messages.append(message)
 
     if not messages or not messages[-1].grouped_id:
@@ -472,6 +538,8 @@ async def _collect(client, route, min_id, limit):
             reverse=True,
             reply_to=route["source_topic"],
         ):
+            if cfg is not None and _stop_requested(cfg):
+                raise DeliveryStopped()
             extra.append(message)
         if not extra:
             break
@@ -483,21 +551,169 @@ async def _collect(client, route, min_id, limit):
     return messages
 
 
-async def _send_group_with_retry(client, cfg, route, kind, messages, listener):
+async def _collect_with_retry(client, cfg, route, min_id, limit, listener):
     while not _stop_requested(cfg):
         try:
-            if kind == "album":
-                await _send_album(client, route, messages)
-                _emit(listener, f"[{route['name']}] ✓ Álbum {messages[0].id}-{messages[-1].id}")
-            else:
-                await _send_message(client, route, messages[0])
-                _emit(listener, f"[{route['name']}] ✓ Mensagem {messages[0].id}")
-            return True
+            return await _collect(client, route, min_id, limit, cfg)
         except FloodWaitError as error:
-            _emit(listener, f"FloodWait: aguardando {error.seconds} segundos.")
+            _emit(listener, f"[{route['name']}] FloodWait na busca: {error.seconds} segundos.")
             if not await _sleep(cfg, error.seconds):
-                return False
-    return False
+                break
+    raise DeliveryStopped()
+
+
+async def _send_group_with_retry(client, cfg, route, kind, messages, listener):
+    journal = cfg["_delivery"]
+    entry = journal.begin(route, kind, messages)
+    label = f"[{route['name']}] IDs {', '.join(map(str, entry['ids']))}"
+    if entry["status"] == "sent":
+        return True
+    fingerprint = hashlib.sha256(json.dumps([
+        [m.id, m.message or "", [e.to_dict() for e in m.entities or []]]
+        for m in messages
+    ], sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    if entry.get("fingerprint", fingerprint) != fingerprint and entry["confirmed"]:
+        journal.update(entry, status="review", error="Origem editada após envio parcial; conferir destino.")
+    if entry["status"] == "review" or entry.get("in_flight"):
+        _emit(listener, f"{label}: pendente de conferência no destino; envio incerto não será repetido automaticamente.")
+        return True
+    if entry["key"] in cfg["_attempted"]:
+        return True  # No máximo uma sequência de recuperação por execução.
+    cfg["_attempted"].add(entry["key"])
+    context = DeliveryContext(
+        journal, entry, lambda: _stop_requested(cfg),
+        lambda seconds: _sleep(cfg, seconds),
+        lambda text: _emit(listener, f"{label}: {text}"),
+    )
+    journal.update(entry, attempts=entry["attempts"] + 1, status="ready", fingerprint=fingerprint)
+    refreshed = False
+    simplified = False
+    try:
+        while not _stop_requested(cfg):
+            try:
+                if kind == "album":
+                    await _send_album(client, route, messages, context)
+                else:
+                    await _send_message(client, route, messages[0], context)
+                journal.update(entry, status="sent", error=None)
+                cfg["_attempted"].discard(entry["key"])
+                _emit(listener, f"{label}: ✓ {'Álbum' if kind == 'album' else 'Mensagem'} enviado(a).")
+                return True
+            except RECOVERABLE_MEDIA_ERRORS as error:
+                _emit(listener, f"{label}: {type(error).__name__}. Mídia: "
+                      f"{', '.join(type(m.media).__name__ for m in messages)}; "
+                      f"emojis personalizados: {sum(isinstance(e, MessageEntityCustomEmoji) for m in messages for e in m.entities or [])}.")
+                if not refreshed:
+                    refreshed = True
+                    _emit(listener, f"{label}: renovando referência da mídia e tentando novamente.")
+                    fresh = await _fetch_ids(client, cfg, route, entry["ids"], listener)
+                    renewed = []
+                    for original, current in zip(messages, fresh):
+                        message = copy.copy(original)
+                        # Manter texto/partes já confirmadas; renovar somente a mídia.
+                        message.media = current.media
+                        renewed.append(message)
+                    messages = renewed
+                    continue
+                if not simplified and any(
+                    isinstance(e, MessageEntityCustomEmoji) for m in messages for e in m.entities or []
+                ) and isinstance(error, (DocumentInvalidError, PremiumAccountRequiredError)):
+                    simplified = True
+                    messages = [copy.copy(m) for m in messages]
+                    for message in messages:
+                        message.entities = _without_custom_emoji(message.entities)
+                    _emit(listener, f"{label}: compatibilidade — tentando com emojis comuns, mantendo mídia, texto e demais estilos.")
+                    continue
+                raise
+        raise DeliveryStopped()
+    except DeliveryStopped:
+        journal.update(entry, status="pending", error="Parada solicitada antes de concluir o envio.")
+        return False
+    except (RECOVERABLE_MEDIA_ERRORS + (SourceMessageUnavailable,)) as error:
+        journal.update(entry, status="pending", error=f"{type(error).__name__}: {error}")
+        _emit(listener, f"{label}: ⚠ PENDENTE — {type(error).__name__}. Salvo para nova tentativa; seguindo a rota.")
+        return True
+    except DeliveryStorageError:
+        raise
+    except Exception as error:
+        # Permissão/autenticação/rede não são mídia inválida: interromper a rota.
+        status = "review" if entry.get("in_flight") else "pending"
+        journal.update(entry, status=status, error=f"{type(error).__name__}: {error}")
+        _emit(listener, f"{label}: pendência salva ({status}); rota interrompida: {type(error).__name__}.")
+        raise
+
+
+async def _fetch_ids(client, cfg, route, ids, listener):
+    while not _stop_requested(cfg):
+        try:
+            messages = await client.get_messages(route["source"], ids=ids)
+            by_id = {m.id: m for m in messages if m is not None and hasattr(m, "media")}
+            missing = [i for i in ids if i not in by_id]
+            if missing:
+                raise SourceMessageUnavailable(f"IDs indisponíveis na origem: {missing}")
+            return [by_id[i] for i in ids]
+        except FloodWaitError as error:
+            _emit(listener, f"[{route['name']}] FloodWait na leitura: {error.seconds} segundos.")
+            if not await _sleep(cfg, error.seconds):
+                break
+    raise DeliveryStopped()
+
+
+async def _setup_delivery(client, cfg, mode):
+    me = await client.get_me()
+    # Pendências de outra conta nunca são reenviadas na conta conectada.
+    cfg["_delivery"] = DeliveryJournal(cfg["files_dir"] / f"{mode}_delivery_{me.id}.json")
+    cfg["_attempted"] = set()
+
+
+async def _process_batch(client, cfg, route, messages, listener, progress, progress_path):
+    key = _route_key(route)
+    for kind, group in _groups(messages):
+        if _stop_requested(cfg):
+            break
+        entry = cfg["_delivery"].begin(route, kind, group)
+        if not await _send_group_with_retry(client, cfg, route, kind, group, listener):
+            break
+        # Cursor = último item examinado. Pendências são salvas ANTES do avanço.
+        progress[key] = max(int(progress.get(key, 0)), group[-1].id)
+        _save_progress(progress_path, progress)
+        cfg["_delivery"].ack(entry)
+
+
+async def _retry_pending(client, cfg, route, listener, cursor):
+    journal = cfg["_delivery"]
+    for entry in list(journal.entries.values()):
+        if entry["route_key"] == _route_key(route) and entry["status"] == "sent" and max(entry["ids"]) <= cursor:
+            journal.ack(entry)
+    for entry in journal.pending(route):
+        if _stop_requested(cfg):
+            return
+        if entry["status"] == "review" or entry.get("in_flight"):
+            _emit(listener, f"[{route['name']}] IDs {entry['ids']}: pendente de conferência manual (resultado incerto).")
+            continue
+        try:
+            _emit(listener, f"[{route['name']}] tentando pendência IDs {entry['ids']}.")
+            messages = await _fetch_ids(client, cfg, route, entry["ids"], listener)
+            await _send_group_with_retry(client, cfg, route, entry["kind"], messages, listener)
+            if entry["status"] == "sent" and max(entry["ids"]) <= cursor:
+                journal.ack(entry)
+        except SourceMessageUnavailable as error:
+            journal.update(entry, status="pending", error=str(error))
+            _emit(listener, f"[{route['name']}] pendência mantida: {error}")
+        except DeliveryStopped:
+            return
+
+
+def _delivery_summary(cfg, routes, listener):
+    journal = cfg.get("_delivery")
+    if journal is None:
+        return
+    keys = {_route_key(route) for route in routes}
+    entries = [e for e in journal.entries.values() if e["route_key"] in keys and e["status"] != "sent"]
+    count = sum(len(e["ids"]) for e in entries)
+    review = sum(len(e["ids"]) for e in entries if e["status"] == "review" or e.get("in_flight"))
+    _emit(listener, f"Pendências: {count} mensagem(ns), incluindo {review} para conferência manual. "
+          "Pendentes não contam como enviadas; rejeições serão tentadas na próxima execução.")
 
 
 async def _authorized_client(cfg):
@@ -509,15 +725,18 @@ async def _authorized_client(cfg):
     return client
 
 
+@_single_sync
 def run_normal(raw_config, listener=None):
     async def task():
         cfg = _config(raw_config)
         routes = _routes(cfg)
+        configured_routes = list(routes)
         progress, progress_path = _load_progress(cfg, "normal_progress.json")
         _clear_stop(cfg)
         client = await _authorized_client(cfg)
         _emit(listener, f"Modo normal conectado · {len(routes)} rota(s).")
         try:
+            await _setup_delivery(client, cfg, "normal")
             active_routes = []
             for route in routes:
                 try:
@@ -532,43 +751,49 @@ def run_normal(raw_config, listener=None):
                             listener,
                             f"[{route['name']}] primeiro uso: monitorando após o ID {progress[key]}.",
                         )
+                    await _retry_pending(client, cfg, route, listener, int(progress.get(key, 0)))
                     active_routes.append(route)
+                except DeliveryStorageError:
+                    raise
                 except Exception as error:
                     _emit(listener, f"[{route['name']}] rota ignorada: {error}")
             routes = active_routes
             if not routes:
                 raise RuntimeError("Nenhuma rota pôde ser iniciada.")
 
+            blocked_routes = set()
             while not _stop_requested(cfg):
                 found_messages = False
                 for route in routes:
                     if _stop_requested(cfg):
                         break
                     key = _route_key(route)
+                    if key in blocked_routes:
+                        continue
                     try:
-                        messages = await _collect(
-                            client,
-                            route,
-                            int(progress.get(key, 0)),
-                            int(cfg.get("batch_size", 100)),
+                        messages = await _collect_with_retry(
+                            client, cfg, route, int(progress.get(key, 0)),
+                            int(cfg.get("batch_size", 100)), listener,
                         )
                         found_messages = found_messages or bool(messages)
-                        for kind, group in _groups(messages):
-                            if _stop_requested(cfg):
-                                break
-                            if await _send_group_with_retry(
-                                client, cfg, route, kind, group, listener
-                            ):
-                                progress[key] = group[-1].id
-                                _save_progress(progress_path, progress)
+                        await _process_batch(client, cfg, route, messages, listener, progress, progress_path)
                     except FloodWaitError as error:
                         _emit(listener, f"FloodWait geral: {error.seconds} segundos.")
                         await _sleep(cfg, error.seconds)
+                    except DeliveryStopped:
+                        break
                     except Exception as error:
-                        _emit(listener, f"[{route['name']}] erro temporário: {error}")
+                        if isinstance(error, DeliveryStorageError):
+                            raise
+                        blocked_routes.add(key)
+                        _emit(listener, f"[{route['name']}] rota pausada nesta execução: {error}")
+                if all(_route_key(route) in blocked_routes for route in routes):
+                    _emit(listener, "Todas as rotas foram pausadas por erro; revise a Atividade antes de reiniciar.")
+                    break
                 if not found_messages:
                     await _sleep(cfg, int(cfg.get("interval", 5)))
         finally:
+            _delivery_summary(cfg, configured_routes, listener)
             await client.disconnect()
             _emit(listener, "Conta desconectada do motor normal.")
 
@@ -580,6 +805,7 @@ def run_normal(raw_config, listener=None):
         return _result(ok=False, error=str(error))
 
 
+@_single_sync
 def run_retro(raw_config, listener=None):
     async def task():
         cfg = _config(raw_config)
@@ -589,33 +815,35 @@ def run_retro(raw_config, listener=None):
         client = await _authorized_client(cfg)
         _emit(listener, f"Modo retroativo conectado · {len(routes)} rota(s).")
         try:
+            await _setup_delivery(client, cfg, "retro")
             for route in routes:
                 if _stop_requested(cfg):
                     break
                 try:
                     key = _route_key(route)
+                    await _retry_pending(client, cfg, route, listener, int(progress.get(key, 0)))
+                    if _stop_requested(cfg):
+                        break
                     start_id = max(
                         route["retro_start_id"], int(progress.get(key, 0))
                     )
                     _emit(listener, f"[{route['name']}] carregando após o ID {start_id}.")
-                    messages = await _collect(
-                        client, route, start_id, route["retro_limit"]
+                    messages = await _collect_with_retry(
+                        client, cfg, route, start_id, route["retro_limit"], listener,
                     )
                     if not messages:
                         _emit(listener, f"[{route['name']}] nenhuma mensagem encontrada.")
                         continue
                     _emit(listener, f"[{route['name']}] {len(messages)} mensagem(ns) carregada(s).")
-                    for kind, group in _groups(messages):
-                        if _stop_requested(cfg):
-                            break
-                        if await _send_group_with_retry(
-                            client, cfg, route, kind, group, listener
-                        ):
-                            progress[key] = group[-1].id
-                            _save_progress(progress_path, progress)
+                    await _process_batch(client, cfg, route, messages, listener, progress, progress_path)
+                except DeliveryStorageError:
+                    raise
+                except DeliveryStopped:
+                    break
                 except Exception as error:
                     _emit(listener, f"[{route['name']}] erro: {error}")
         finally:
+            _delivery_summary(cfg, routes, listener)
             await client.disconnect()
             _emit(listener, "Conta desconectada do motor retroativo.")
 
