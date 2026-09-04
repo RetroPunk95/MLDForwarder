@@ -117,9 +117,14 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/homeAccountMetricCard"
                 style="@style/MetricCard"
                 android:layout_marginStart="5dp"
-                android:layout_marginEnd="5dp">
+                android:layout_marginEnd="5dp"
+                android:clickable="true"
+                android:contentDescription="Verificar sessão da conta"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
 
                 <TextView
                     style="@style/MetricLabel"

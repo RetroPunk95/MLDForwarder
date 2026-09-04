@@ -16,8 +16,6 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.Button;
-import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -27,6 +25,8 @@ import org.json.JSONObject;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {
     private static final String PREFS = "mld_alpha";
@@ -77,6 +77,16 @@ public class MainActivity extends Activity {
     private JSONArray routes = new JSONArray();
     private int selectedRouteIndex = -1;
     private String phoneCodeHash = "";
+    private String sourceSelectionId = "";
+    private String sourceSelectionLabel = "";
+    private String sourceSelectionKind = "";
+    private String sourceTopicSelectionId = "";
+    private String sourceTopicSelectionLabel = "";
+    private String targetSelectionId = "";
+    private String targetSelectionLabel = "";
+    private String targetSelectionKind = "";
+    private String targetTopicSelectionId = "";
+    private String targetTopicSelectionLabel = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -161,6 +171,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.startRetroButton).setOnClickListener(v -> startSync("retro"));
         findViewById(R.id.stopButton).setOnClickListener(v -> stopSync());
         findViewById(R.id.homeOpenRoutesButton).setOnClickListener(v -> showPanel("routes"));
+        findViewById(R.id.homeAccountMetricCard).setOnClickListener(v -> checkSessionFromHome());
         findViewById(R.id.clearLogButton).setOnClickListener(v -> logText.setText("Pronto para configurar."));
         findViewById(R.id.navHome).setOnClickListener(v -> showPanel("home"));
         findViewById(R.id.navRoutes).setOnClickListener(v -> showPanel("routes"));
@@ -181,12 +192,34 @@ public class MainActivity extends Activity {
 
     private void checkSession() {
         if (!validateAccount()) return;
+        verifySession(false);
+    }
+
+    private void checkSessionFromHome() {
+        if (!validateAccount()) {
+            showPanel("account");
+            return;
+        }
+        verifySession(true);
+    }
+
+    private void verifySession(boolean fromHome) {
         saveFields();
+        homeAccountMetricText.setText("Verificando…");
+        homeAccountMetricText.setTextColor(getColor(R.color.primary_light));
         appendLog("Verificando sessão...");
         runPython("check_session", result -> {
             boolean authorized = result.optBoolean("authorized", false);
             updateAccountStatus(authorized);
             appendLog(result.optString("message", result.optString("error", "Verificação concluída.")));
+            if (fromHome) {
+                if (authorized) {
+                    toast("Sessão conectada.");
+                } else {
+                    showPanel("account");
+                    toast("Conecte sua conta para continuar.");
+                }
+            }
         }, accountJson().toString());
     }
 
@@ -237,28 +270,61 @@ public class MainActivity extends Activity {
     }
 
     private void showDialogPicker(JSONArray items, boolean selectingSource) {
-        String[] labels = new String[items.length()];
+        List<SelectorDialog.Item> pickerItems = new ArrayList<>();
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
-            labels[i] = item == null ? "Chat" : item.optString("label", item.optString("name", "Chat"));
+            if (item == null) continue;
+            String name = item.optString("name", "Chat");
+            String kind = item.optString("kind", "Conversa");
+            String id = item.optString("id", "");
+            String fullLabel = item.optString("label", "");
+            String details = fullLabel.startsWith(name + " · ")
+                    ? fullLabel.substring((name + " · ").length())
+                    : kind;
+            if (!id.isEmpty()) details += " · ID " + id;
+            String badge = item.optBoolean("forum", false) ? "Fórum" : "";
+            String icon = item.optBoolean("saved_messages", false)
+                    ? "★"
+                    : ("Canal".equals(kind) ? "#" : ("Grupo".equals(kind) ? "G" : "@"));
+            pickerItems.add(new SelectorDialog.Item(i, id, name, details, badge, kind, icon));
         }
-        new AlertDialog.Builder(this)
-                .setTitle(selectingSource ? "Selecionar origem" : "Selecionar destino")
-                .setItems(labels, (dialog, which) -> {
-                    JSONObject item = items.optJSONObject(which);
+        SelectorDialog.showSingle(
+                this,
+                selectingSource ? "Selecionar origem" : "Selecionar destino",
+                "Busque e escolha um canal, grupo, conversa ou Mensagens salvas.",
+                pickerItems,
+                true,
+                true,
+                selected -> {
+                    JSONObject item = items.optJSONObject(selected.index);
                     if (item == null) return;
-                    String id = item.optString("id", "");
-                    if (selectingSource) {
-                        sourceInput.setText(id);
-                        sourceTopicInput.setText("");
-                    } else {
-                        targetInput.setText(id);
-                        targetTopicInput.setText("");
-                    }
-                    appendLog((selectingSource ? "Origem: " : "Destino: ") + labels[which]);
-                })
-                .setNegativeButton("Cancelar", null)
-                .show();
+                    applyPeerSelection(selectingSource, item);
+                    appendLog((selectingSource ? "Origem: " : "Destino: ") + selected.title);
+                }
+        );
+    }
+
+    private void applyPeerSelection(boolean selectingSource, JSONObject item) {
+        String id = item.optString("id", "");
+        String name = item.optString("name", id);
+        String kind = item.optString("kind", "Chat");
+        if (selectingSource) {
+            sourceInput.setText(id);
+            sourceTopicInput.setText("");
+            sourceSelectionId = id;
+            sourceSelectionLabel = name;
+            sourceSelectionKind = kind;
+            sourceTopicSelectionId = "";
+            sourceTopicSelectionLabel = "";
+        } else {
+            targetInput.setText(id);
+            targetTopicInput.setText("");
+            targetSelectionId = id;
+            targetSelectionLabel = name;
+            targetSelectionKind = kind;
+            targetTopicSelectionId = "";
+            targetTopicSelectionLabel = "";
+        }
     }
 
     private void listTopics(boolean selectingSource) {
@@ -280,25 +346,38 @@ public class MainActivity extends Activity {
     }
 
     private void showTopicPicker(JSONArray items, boolean selectingSource) {
-        String[] labels = new String[items.length() + 1];
-        labels[0] = "Sem tópico (chat inteiro)";
+        List<SelectorDialog.Item> pickerItems = new ArrayList<>();
+        pickerItems.add(new SelectorDialog.Item(-1, "", "Chat inteiro",
+                "Sincronizar sem restringir a um tópico", "", "Tópico", "∞"));
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
-            labels[i + 1] = item == null ? "Tópico" : item.optString("label", item.optString("title", "Tópico"));
+            if (item == null) continue;
+            String title = item.optString("title", "Tópico");
+            String id = item.optString("id", "");
+            pickerItems.add(new SelectorDialog.Item(i, id, title, "ID " + id,
+                    "Tópico", "Tópico", "T"));
         }
-        new AlertDialog.Builder(this)
-                .setTitle(selectingSource ? "Tópico de origem" : "Tópico de destino")
-                .setItems(labels, (dialog, which) -> {
-                    EditText field = selectingSource ? sourceTopicInput : targetTopicInput;
-                    if (which == 0) {
-                        field.setText("");
-                        return;
-                    }
-                    JSONObject item = items.optJSONObject(which - 1);
-                    if (item != null) field.setText(item.optString("id", ""));
-                })
-                .setNegativeButton("Cancelar", null)
-                .show();
+        SelectorDialog.showSingle(
+                this,
+                selectingSource ? "Tópico de origem" : "Tópico de destino",
+                "Escolha um tópico ou use o chat inteiro.",
+                pickerItems,
+                items.length() > 8,
+                false,
+                selected -> applyTopicSelection(selectingSource, selected)
+        );
+    }
+
+    private void applyTopicSelection(boolean selectingSource, SelectorDialog.Item item) {
+        if (selectingSource) {
+            sourceTopicInput.setText(item.id);
+            sourceTopicSelectionId = item.id;
+            sourceTopicSelectionLabel = item.index < 0 ? "" : item.title;
+        } else {
+            targetTopicInput.setText(item.id);
+            targetTopicSelectionId = item.id;
+            targetTopicSelectionLabel = item.index < 0 ? "" : item.title;
+        }
     }
 
     private void newRoute() {
@@ -310,6 +389,7 @@ public class MainActivity extends Activity {
         targetTopicInput.setText("");
         retroLimitInput.setText("100");
         retroStartIdInput.setText("0");
+        clearSelectionMetadata();
         updateRouteSummary();
     }
 
@@ -338,16 +418,15 @@ public class MainActivity extends Activity {
             toast("Nenhuma rota salva.");
             return;
         }
-        String[] labels = new String[routes.length()];
+        List<SelectorDialog.Item> pickerItems = new ArrayList<>();
         for (int i = 0; i < routes.length(); i++) {
             JSONObject route = routes.optJSONObject(i);
-            labels[i] = route == null ? "Rota " + (i + 1) : route.optString("name", "Rota " + (i + 1));
+            if (route == null) continue;
+            pickerItems.add(routePickerItem(route, i));
         }
-        new AlertDialog.Builder(this)
-                .setTitle("Rotas salvas")
-                .setItems(labels, (dialog, which) -> loadRoute(which))
-                .setNegativeButton("Cancelar", null)
-                .show();
+        SelectorDialog.showSingle(this, "Rotas salvas",
+                "Escolha uma rota para visualizar ou editar.", pickerItems,
+                routes.length() > 8, false, selected -> loadRoute(selected.index));
     }
 
     private void loadRoute(int index) {
@@ -361,6 +440,16 @@ public class MainActivity extends Activity {
         targetTopicInput.setText(optionalNumber(route, "target_topic"));
         retroLimitInput.setText(String.valueOf(route.optInt("retro_limit", 100)));
         retroStartIdInput.setText(String.valueOf(route.optInt("retro_start_id", 0)));
+        sourceSelectionId = route.optString("source", "");
+        sourceSelectionLabel = route.optString("source_label", "");
+        sourceSelectionKind = route.optString("source_kind", "");
+        sourceTopicSelectionId = optionalNumber(route, "source_topic");
+        sourceTopicSelectionLabel = route.optString("source_topic_label", "");
+        targetSelectionId = route.optString("target", "");
+        targetSelectionLabel = route.optString("target_label", "");
+        targetSelectionKind = route.optString("target_kind", "");
+        targetTopicSelectionId = optionalNumber(route, "target_topic");
+        targetTopicSelectionLabel = route.optString("target_topic_label", "");
         updateRouteSummary();
     }
 
@@ -394,117 +483,23 @@ public class MainActivity extends Activity {
     }
 
     private void showRouteSelection(String mode) {
-        int routeCount = routes.length();
-        String[] labels = new String[routeCount];
-        for (int i = 0; i < routeCount; i++) {
-            labels[i] = routeLabel(routes.optJSONObject(i), i);
-        }
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        int padding = dp(20);
-        content.setPadding(padding, dp(4), padding, 0);
-
-        TextView hint = new TextView(this);
-        hint.setText("Marque as rotas que participarão desta execução. Você pode iniciar uma, várias ou todas.");
-        hint.setTextColor(getColor(R.color.text_secondary));
-        hint.setTextSize(13);
-        content.addView(hint, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        ));
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(android.view.Gravity.END);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        actionsParams.topMargin = dp(10);
-        content.addView(actions, actionsParams);
-
-        Button selectAllButton = new Button(this);
-        selectAllButton.setText("Todas");
-        selectAllButton.setTextSize(12);
-        actions.addView(selectAllButton, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                dp(42)
-        ));
-
-        Button clearButton = new Button(this);
-        clearButton.setText("Limpar");
-        clearButton.setTextSize(12);
-        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                dp(42)
-        );
-        clearParams.leftMargin = dp(6);
-        actions.addView(clearButton, clearParams);
-
-        final ListView routeList = new ListView(this);
-        routeList.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
-        routeList.setAdapter(new android.widget.ArrayAdapter<>(
-                this,
-                android.R.layout.simple_list_item_multiple_choice,
-                labels
-        ));
-        for (int i = 0; i < routeCount; i++) {
-            routeList.setItemChecked(i, true);
-        }
-        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(Math.min(280, Math.max(120, routeCount * 56)))
-        );
-        listParams.topMargin = dp(4);
-        content.addView(routeList, listParams);
-
-        TextView selectionCount = new TextView(this);
-        selectionCount.setTextColor(getColor(R.color.text_secondary));
-        selectionCount.setTextSize(12);
-        LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        countParams.topMargin = dp(8);
-        content.addView(selectionCount, countParams);
-        updateSelectionCount(selectionCount, routeList, routeCount);
-
-        routeList.setOnItemClickListener((parent, view, position, id) ->
-                updateSelectionCount(selectionCount, routeList, routeCount));
-        selectAllButton.setOnClickListener(v -> {
-            for (int i = 0; i < routeCount; i++) routeList.setItemChecked(i, true);
-            updateSelectionCount(selectionCount, routeList, routeCount);
-        });
-        clearButton.setOnClickListener(v -> {
-            for (int i = 0; i < routeCount; i++) routeList.setItemChecked(i, false);
-            updateSelectionCount(selectionCount, routeList, routeCount);
-        });
-
         String title = "retro".equals(mode) ? "Sincronização retroativa" : "Sincronização normal";
         String action = "retro".equals(mode) ? "Iniciar retroativa" : "Iniciar normal";
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setView(content)
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton(action, null)
-                .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        List<SelectorDialog.Item> pickerItems = new ArrayList<>();
+        for (int i = 0; i < routes.length(); i++) {
+            JSONObject route = routes.optJSONObject(i);
+            if (route != null) pickerItems.add(routePickerItem(route, i));
+        }
+        SelectorDialog.showMulti(this, title,
+                "Marque as rotas que participarão desta execução.", action,
+                pickerItems, selected -> {
             JSONArray selectedRoutes = new JSONArray();
-            for (int i = 0; i < routeCount; i++) {
-                if (routeList.isItemChecked(i)) {
-                    JSONObject route = routes.optJSONObject(i);
-                    if (route != null) selectedRoutes.put(route);
-                }
+            for (SelectorDialog.Item item : selected) {
+                JSONObject route = routes.optJSONObject(item.index);
+                if (route != null) selectedRoutes.put(route);
             }
-            if (selectedRoutes.length() == 0) {
-                toast("Selecione pelo menos uma rota.");
-                return;
-            }
-            dialog.dismiss();
             startSelectedRoutes(mode, selectedRoutes);
-        }));
-        dialog.show();
+        });
     }
 
     private void startSelectedRoutes(String mode, JSONArray selectedRoutes) {
@@ -531,24 +526,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String routeLabel(JSONObject route, int index) {
-        if (route == null) return "Rota " + (index + 1);
+    private SelectorDialog.Item routePickerItem(JSONObject route, int index) {
         String name = route.optString("name", "Rota " + (index + 1));
-        String source = route.optString("source", "Origem");
-        String target = route.optString("target", "Destino");
-        return name + "\n" + source + "  →  " + target;
-    }
-
-    private void updateSelectionCount(TextView label, ListView list, int routeCount) {
-        int selected = 0;
-        for (int i = 0; i < routeCount; i++) {
-            if (list.isItemChecked(i)) selected++;
-        }
-        label.setText(selected == 1 ? "1 rota selecionada" : selected + " rotas selecionadas");
-    }
-
-    private int dp(int value) {
-        return Math.round(value * getResources().getDisplayMetrics().density);
+        String flow = routeEndpointLabel(route, "source", "Origem")
+                + "  →  " + routeEndpointLabel(route, "target", "Destino");
+        return new SelectorDialog.Item(index, String.valueOf(index), name, flow,
+                "Normal + retroativa", "Rota", "↗");
     }
 
     private void stopSync() {
@@ -567,6 +550,14 @@ public class MainActivity extends Activity {
         putOptionalInt(route, "source_topic", text(sourceTopicInput));
         route.put("target", text(targetInput));
         putOptionalInt(route, "target_topic", text(targetTopicInput));
+        putSelectionMetadata(route, "source", text(sourceInput), sourceSelectionId,
+                sourceSelectionLabel, sourceSelectionKind);
+        putTopicMetadata(route, "source_topic", text(sourceTopicInput),
+                sourceTopicSelectionId, sourceTopicSelectionLabel);
+        putSelectionMetadata(route, "target", text(targetInput), targetSelectionId,
+                targetSelectionLabel, targetSelectionKind);
+        putTopicMetadata(route, "target_topic", text(targetTopicInput),
+                targetTopicSelectionId, targetTopicSelectionLabel);
         route.put("retro_limit", positiveInt(text(retroLimitInput), 100));
         route.put("retro_start_id", nonNegativeInt(text(retroStartIdInput), 0));
         return route;
@@ -631,6 +622,7 @@ public class MainActivity extends Activity {
                 R.id.selectSourceTopicButton, R.id.selectTargetTopicButton
         };
         for (int id : ids) findViewById(id).setEnabled(enabled);
+        findViewById(R.id.homeAccountMetricCard).setEnabled(enabled);
     }
 
     private void appendLog(String message) {
@@ -714,10 +706,46 @@ public class MainActivity extends Activity {
             homeCurrentRouteFlowText.setText("Abra o gerenciador para configurar origem e destino.");
         } else {
             homeCurrentRouteTitleText.setText(selectedRoute.optString("name", "Rota"));
-            String source = selectedRoute.optString("source", "Origem");
-            String target = selectedRoute.optString("target", "Destino");
+            String source = routeEndpointLabel(selectedRoute, "source", "Origem");
+            String target = routeEndpointLabel(selectedRoute, "target", "Destino");
             homeCurrentRouteFlowText.setText(source + "  →  " + target);
         }
+    }
+
+    private String routeEndpointLabel(JSONObject route, String prefix, String fallback) {
+        String id = route.optString(prefix, fallback);
+        String label = route.optString(prefix + "_label", "");
+        String topic = route.optString(prefix + "_topic_label", "");
+        String value = label.isEmpty() ? id : label;
+        return topic.isEmpty() ? value : value + " · " + topic;
+    }
+
+    private void putSelectionMetadata(JSONObject route, String prefix, String currentId,
+                                      String selectedId, String label, String kind) throws JSONException {
+        if (currentId.equals(selectedId) && !label.isEmpty()) {
+            route.put(prefix + "_label", label);
+            route.put(prefix + "_kind", kind);
+        }
+    }
+
+    private void putTopicMetadata(JSONObject route, String prefix, String currentId,
+                                  String selectedId, String label) throws JSONException {
+        if (!currentId.isEmpty() && currentId.equals(selectedId) && !label.isEmpty()) {
+            route.put(prefix + "_label", label);
+        }
+    }
+
+    private void clearSelectionMetadata() {
+        sourceSelectionId = "";
+        sourceSelectionLabel = "";
+        sourceSelectionKind = "";
+        sourceTopicSelectionId = "";
+        sourceTopicSelectionLabel = "";
+        targetSelectionId = "";
+        targetSelectionLabel = "";
+        targetSelectionKind = "";
+        targetTopicSelectionId = "";
+        targetTopicSelectionLabel = "";
     }
 
     private void showPanel(String panel) {
