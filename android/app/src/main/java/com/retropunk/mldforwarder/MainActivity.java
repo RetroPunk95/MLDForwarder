@@ -16,6 +16,8 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.Button;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -388,11 +390,129 @@ public class MainActivity extends Activity {
             toast("Salve pelo menos uma rota antes de iniciar.");
             return;
         }
+        showRouteSelection(mode);
+    }
+
+    private void showRouteSelection(String mode) {
+        int routeCount = routes.length();
+        String[] labels = new String[routeCount];
+        for (int i = 0; i < routeCount; i++) {
+            labels[i] = routeLabel(routes.optJSONObject(i), i);
+        }
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(20);
+        content.setPadding(padding, dp(4), padding, 0);
+
+        TextView hint = new TextView(this);
+        hint.setText("Marque as rotas que participarão desta execução. Você pode iniciar uma, várias ou todas.");
+        hint.setTextColor(getColor(R.color.text_secondary));
+        hint.setTextSize(13);
+        content.addView(hint, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        ));
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(android.view.Gravity.END);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        actionsParams.topMargin = dp(10);
+        content.addView(actions, actionsParams);
+
+        Button selectAllButton = new Button(this);
+        selectAllButton.setText("Todas");
+        selectAllButton.setTextSize(12);
+        actions.addView(selectAllButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(42)
+        ));
+
+        Button clearButton = new Button(this);
+        clearButton.setText("Limpar");
+        clearButton.setTextSize(12);
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(42)
+        );
+        clearParams.leftMargin = dp(6);
+        actions.addView(clearButton, clearParams);
+
+        final ListView routeList = new ListView(this);
+        routeList.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
+        routeList.setAdapter(new android.widget.ArrayAdapter<>(
+                this,
+                android.R.layout.simple_list_item_multiple_choice,
+                labels
+        ));
+        for (int i = 0; i < routeCount; i++) {
+            routeList.setItemChecked(i, true);
+        }
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(Math.min(280, Math.max(120, routeCount * 56)))
+        );
+        listParams.topMargin = dp(4);
+        content.addView(routeList, listParams);
+
+        TextView selectionCount = new TextView(this);
+        selectionCount.setTextColor(getColor(R.color.text_secondary));
+        selectionCount.setTextSize(12);
+        LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        countParams.topMargin = dp(8);
+        content.addView(selectionCount, countParams);
+        updateSelectionCount(selectionCount, routeList, routeCount);
+
+        routeList.setOnItemClickListener((parent, view, position, id) ->
+                updateSelectionCount(selectionCount, routeList, routeCount));
+        selectAllButton.setOnClickListener(v -> {
+            for (int i = 0; i < routeCount; i++) routeList.setItemChecked(i, true);
+            updateSelectionCount(selectionCount, routeList, routeCount);
+        });
+        clearButton.setOnClickListener(v -> {
+            for (int i = 0; i < routeCount; i++) routeList.setItemChecked(i, false);
+            updateSelectionCount(selectionCount, routeList, routeCount);
+        });
+
+        String title = "retro".equals(mode) ? "Sincronização retroativa" : "Sincronização normal";
+        String action = "retro".equals(mode) ? "Iniciar retroativa" : "Iniciar normal";
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(content)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton(action, null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            JSONArray selectedRoutes = new JSONArray();
+            for (int i = 0; i < routeCount; i++) {
+                if (routeList.isItemChecked(i)) {
+                    JSONObject route = routes.optJSONObject(i);
+                    if (route != null) selectedRoutes.put(route);
+                }
+            }
+            if (selectedRoutes.length() == 0) {
+                toast("Selecione pelo menos uma rota.");
+                return;
+            }
+            dialog.dismiss();
+            startSelectedRoutes(mode, selectedRoutes);
+        }));
+        dialog.show();
+    }
+
+    private void startSelectedRoutes(String mode, JSONArray selectedRoutes) {
         saveFields();
         try {
             JSONObject config = accountJson();
             config.put("files_dir", getFilesDir().getAbsolutePath());
-            config.put("routes", routes);
+            config.put("routes", selectedRoutes);
             config.put("interval", 5);
             config.put("batch_size", 100);
 
@@ -405,10 +525,30 @@ public class MainActivity extends Activity {
                 startService(service);
             }
             updateServiceStatus(true, mode);
-            appendLog("Iniciando " + routes.length() + " rota(s) em modo " + mode + ".");
+            appendLog("Iniciando " + selectedRoutes.length() + " rota(s) em modo " + mode + ".");
         } catch (JSONException error) {
             appendLog("Configuração inválida: " + error.getMessage());
         }
+    }
+
+    private String routeLabel(JSONObject route, int index) {
+        if (route == null) return "Rota " + (index + 1);
+        String name = route.optString("name", "Rota " + (index + 1));
+        String source = route.optString("source", "Origem");
+        String target = route.optString("target", "Destino");
+        return name + "\n" + source + "  →  " + target;
+    }
+
+    private void updateSelectionCount(TextView label, ListView list, int routeCount) {
+        int selected = 0;
+        for (int i = 0; i < routeCount; i++) {
+            if (list.isItemChecked(i)) selected++;
+        }
+        label.setText(selected == 1 ? "1 rota selecionada" : selected + " rotas selecionadas");
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void stopSync() {
