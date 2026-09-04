@@ -1,4 +1,4 @@
-# MLDForwarder Android 1.1.5
+# MLDForwarder Android 1.1.6
 
 Versão Android do núcleo do MLDForwarder, direcionada à sincronização normal e
 retroativa de canais, grupos, conversas e tópicos do Telegram. Compatível com Android 7 ou
@@ -9,7 +9,7 @@ superior e validada inicialmente no Android 12.
 - autenticação por telefone, código e senha 2FA;
 - sessão Telethon persistente no armazenamento privado do aplicativo;
 - API ID, API Hash e telefone protegidos com AES-GCM pelo Android Keystore;
-- seletores personalizados com busca para canais, grupos, conversas privadas, Mensagens salvas e tópicos;\n- nomes legíveis de origem, destino e tópicos preservados nas rotas;\n- verificação de sessão diretamente pela tela inicial;
+- seletores personalizados com busca para canais, grupos, conversas privadas, Mensagens salvas e tópicos;\n- nomes legíveis de origem, destino e tópicos preservados nas rotas;\n- verificação de sessão diretamente pela tela inicial;\n- acesso às rotas salvas pelo card da tela inicial e exclusão segura por item;
 - múltiplas rotas salvas e executadas na mesma sincronização;
 - origem e destino em canal, grupo inteiro ou tópico;
 - sincronização normal com progresso independente por rota;

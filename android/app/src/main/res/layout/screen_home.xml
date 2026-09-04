@@ -103,8 +103,13 @@
             android:orientation="horizontal">
 
             <LinearLayout
+                android:id="@+id/homeRoutesMetricCard"
                 style="@style/MetricCard"
-                android:layout_marginEnd="5dp">
+                android:layout_marginEnd="5dp"
+                android:clickable="true"
+                android:contentDescription="Abrir rotas salvas"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
 
                 <TextView
                     style="@style/MetricLabel"

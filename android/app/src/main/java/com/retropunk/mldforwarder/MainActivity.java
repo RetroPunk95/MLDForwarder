@@ -2,7 +2,6 @@ package com.retropunk.mldforwarder;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -171,6 +170,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.startRetroButton).setOnClickListener(v -> startSync("retro"));
         findViewById(R.id.stopButton).setOnClickListener(v -> stopSync());
         findViewById(R.id.homeOpenRoutesButton).setOnClickListener(v -> showPanel("routes"));
+        findViewById(R.id.homeRoutesMetricCard).setOnClickListener(v -> selectRoute());
         findViewById(R.id.homeAccountMetricCard).setOnClickListener(v -> checkSessionFromHome());
         findViewById(R.id.clearLogButton).setOnClickListener(v -> logText.setText("Pronto para configurar."));
         findViewById(R.id.navHome).setOnClickListener(v -> showPanel("home"));
@@ -424,9 +424,11 @@ public class MainActivity extends Activity {
             if (route == null) continue;
             pickerItems.add(routePickerItem(route, i));
         }
-        SelectorDialog.showSingle(this, "Rotas salvas",
+        SelectorDialog.showSingleWithActions(this, "Rotas salvas",
                 "Escolha uma rota para visualizar ou editar.", pickerItems,
-                routes.length() > 8, false, selected -> loadRoute(selected.index));
+                routes.length() > 8,
+                selected -> loadRoute(selected.index),
+                selected -> confirmDeleteRoute(selected.index));
     }
 
     private void loadRoute(int index) {
@@ -458,17 +460,42 @@ public class MainActivity extends Activity {
             toast("Selecione uma rota salva para excluir.");
             return;
         }
-        new AlertDialog.Builder(this)
-                .setTitle("Excluir rota?")
-                .setMessage("O progresso registrado não será apagado.")
-                .setPositiveButton("Excluir", (dialog, which) -> {
-                    routes.remove(selectedRouteIndex);
-                    selectedRouteIndex = -1;
-                    persistRoutes();
-                    newRoute();
-                })
-                .setNegativeButton("Cancelar", null)
-                .show();
+        confirmDeleteRoute(selectedRouteIndex);
+    }
+
+    private void confirmDeleteRoute(int index) {
+        JSONObject route = routes.optJSONObject(index);
+        if (route == null) return;
+        String name = route.optString("name", "Rota " + (index + 1));
+        ConfirmationDialog.show(
+                this,
+                "Excluir rota?",
+                "A rota “" + name + "” será removida. O progresso registrado não será apagado.",
+                "Excluir rota",
+                () -> deleteRouteAt(index)
+        );
+    }
+
+    private void deleteRouteAt(int index) {
+        if (index < 0 || index >= routes.length()) return;
+        String name = routes.optJSONObject(index) == null
+                ? "Rota " + (index + 1)
+                : routes.optJSONObject(index).optString("name", "Rota " + (index + 1));
+        routes.remove(index);
+        if (selectedRouteIndex > index) selectedRouteIndex--;
+        else if (selectedRouteIndex == index) selectedRouteIndex = -1;
+        persistRoutes();
+
+        if (routes.length() == 0) {
+            newRoute();
+        } else {
+            int nextIndex = selectedRouteIndex >= 0
+                    ? selectedRouteIndex
+                    : Math.min(index, routes.length() - 1);
+            loadRoute(nextIndex);
+            selectRoute();
+        }
+        toast(name + " excluída.");
     }
 
     private void startSync(String mode) {
@@ -622,6 +649,7 @@ public class MainActivity extends Activity {
                 R.id.selectSourceTopicButton, R.id.selectTargetTopicButton
         };
         for (int id : ids) findViewById(id).setEnabled(enabled);
+        findViewById(R.id.homeRoutesMetricCard).setEnabled(enabled);
         findViewById(R.id.homeAccountMetricCard).setEnabled(enabled);
     }
 

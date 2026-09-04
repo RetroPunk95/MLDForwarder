@@ -37,6 +37,10 @@ final class SelectorDialog extends Dialog {
         void onConfirmed(List<Item> items);
     }
 
+    interface ItemActionListener {
+        void onAction(Item item);
+    }
+
     static final class Item {
         final int index;
         final String id;
@@ -67,6 +71,7 @@ final class SelectorDialog extends Dialog {
     private final String actionLabel;
     private final SingleListener singleListener;
     private final MultiListener multiListener;
+    private final ItemActionListener itemActionListener;
     private final Set<Integer> selected = new LinkedHashSet<>();
     private final ArrayList<Item> visibleItems = new ArrayList<>();
 
@@ -92,7 +97,8 @@ final class SelectorDialog extends Dialog {
             boolean filterable,
             String actionLabel,
             SingleListener singleListener,
-            MultiListener multiListener
+            MultiListener multiListener,
+            ItemActionListener itemActionListener
     ) {
         super(activity);
         this.activity = activity;
@@ -105,6 +111,7 @@ final class SelectorDialog extends Dialog {
         this.actionLabel = actionLabel;
         this.singleListener = singleListener;
         this.multiListener = multiListener;
+        this.itemActionListener = itemActionListener;
         if (multiple) {
             for (Item item : items) selected.add(item.index);
         }
@@ -120,7 +127,20 @@ final class SelectorDialog extends Dialog {
             SingleListener listener
     ) {
         new SelectorDialog(activity, title, subtitle, items, false, searchable, filterable,
-                "", listener, null).show();
+                "", listener, null, null).show();
+    }
+
+    static void showSingleWithActions(
+            Activity activity,
+            String title,
+            String subtitle,
+            List<Item> items,
+            boolean searchable,
+            SingleListener listener,
+            ItemActionListener actionListener
+    ) {
+        new SelectorDialog(activity, title, subtitle, items, false, searchable, false,
+                "", listener, null, actionListener).show();
     }
 
     static void showMulti(
@@ -132,7 +152,7 @@ final class SelectorDialog extends Dialog {
             MultiListener listener
     ) {
         new SelectorDialog(activity, title, subtitle, items, true, false, false,
-                actionLabel, null, listener).show();
+                actionLabel, null, listener, null).show();
     }
 
     @Override
@@ -316,6 +336,7 @@ final class SelectorDialog extends Dialog {
             TextView subtitle = row.findViewById(R.id.selectorItemSubtitle);
             TextView badge = row.findViewById(R.id.selectorItemBadge);
             ImageView check = row.findViewById(R.id.selectorItemCheck);
+            ImageView action = row.findViewById(R.id.selectorItemAction);
 
             icon.setText(item.icon.isEmpty() ? "•" : item.icon);
             title.setText(item.title);
@@ -326,6 +347,17 @@ final class SelectorDialog extends Dialog {
             check.setVisibility(multiple ? View.VISIBLE : View.GONE);
             if (multiple) {
                 check.setImageResource(checked ? R.drawable.ic_check_selected : R.drawable.ic_check_unselected);
+            }
+            boolean hasAction = !multiple && itemActionListener != null;
+            action.setVisibility(hasAction ? View.VISIBLE : View.GONE);
+            if (hasAction) {
+                action.setContentDescription("Excluir " + item.title);
+                action.setOnClickListener(v -> {
+                    dismiss();
+                    itemActionListener.onAction(item);
+                });
+            } else {
+                action.setOnClickListener(null);
             }
             return row;
         }

@@ -72,4 +72,17 @@
         android:layout_marginStart="10dp"
         android:contentDescription="Selecionada"
         android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/selectorItemAction"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_delete_action"
+        android:clickable="true"
+        android:contentDescription="Excluir rota"
+        android:focusable="true"
+        android:padding="9dp"
+        android:src="@drawable/ic_delete"
+        android:visibility="gone" />
 </LinearLayout>
