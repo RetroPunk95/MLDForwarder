@@ -221,7 +221,7 @@ public class MainActivity extends Activity {
 
     private void listDialogs(boolean selectingSource) {
         if (!validateAccount()) return;
-        appendLog("Carregando canais e grupos...");
+        appendLog("Carregando canais, grupos e conversas...");
         runPython("list_dialogs", result -> {
             if (!result.optBoolean("ok", false)) {
                 appendLog(result.optString("error", "Não foi possível listar os chats."));
@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
             }
             JSONArray items = result.optJSONArray("items");
             if (items == null || items.length() == 0) {
-                appendLog("Nenhum canal ou grupo encontrado.");
+                appendLog("Nenhum canal, grupo ou conversa encontrado.");
                 return;
             }
             showDialogPicker(items, selectingSource);

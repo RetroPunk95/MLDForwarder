@@ -236,27 +236,65 @@ def list_dialogs(raw_config):
         try:
             if not await client.is_user_authorized():
                 return _result(ok=False, error="Conecte a conta antes de listar os chats.")
+            me = await client.get_me()
+            self_id = int(me.id) if me else None
             dialogs = []
             async for dialog in client.iter_dialogs(ignore_migrated=True):
-                if not (getattr(dialog, "is_channel", False) or getattr(dialog, "is_group", False)):
+                is_group = bool(getattr(dialog, "is_group", False))
+                is_channel = bool(getattr(dialog, "is_channel", False))
+                is_user = bool(getattr(dialog, "is_user", False))
+                if not (is_channel or is_group or is_user):
                     continue
                 entity = getattr(dialog, "entity", None)
                 if getattr(entity, "left", False) or getattr(entity, "deactivated", False):
                     continue
-                kind = "Grupo" if getattr(dialog, "is_group", False) else "Canal"
-                forum = " · fórum" if getattr(entity, "forum", False) else ""
-                dialogs.append((str(dialog.name or dialog.id).strip(), int(dialog.id), kind, forum))
-            dialogs.sort(key=lambda item: item[0].casefold())
-            items = [
-                {
-                    "name": name,
-                    "id": peer_id,
-                    "kind": kind,
-                    "forum": bool(forum),
-                    "label": f"{name} · {kind}{forum}",
-                }
-                for name, peer_id, kind, forum in dialogs
-            ]
+
+                peer_id = int(dialog.id)
+                is_saved = is_user and self_id is not None and peer_id == self_id
+                if is_saved:
+                    name = "Mensagens salvas"
+                    kind = "Conversa"
+                else:
+                    name = str(dialog.name or dialog.id).strip()
+                    kind = "Grupo" if is_group else ("Canal" if is_channel else "Conversa")
+
+                username = getattr(entity, "username", None)
+                forum = bool(getattr(entity, "forum", False))
+                details = [kind]
+                if username and not is_saved:
+                    details.append(f"@{username}")
+                if forum:
+                    details.append("fórum")
+                dialogs.append(
+                    {
+                        "name": name,
+                        "id": peer_id,
+                        "kind": kind,
+                        "forum": forum,
+                        "saved_messages": is_saved,
+                        "label": f"{name} · {' · '.join(details)}",
+                    }
+                )
+
+            if self_id is not None and not any(item["saved_messages"] for item in dialogs):
+                dialogs.append(
+                    {
+                        "name": "Mensagens salvas",
+                        "id": self_id,
+                        "kind": "Conversa",
+                        "forum": False,
+                        "saved_messages": True,
+                        "label": "Mensagens salvas · Conversa",
+                    }
+                )
+
+            dialogs.sort(
+                key=lambda item: (
+                    not item["saved_messages"],
+                    item["name"].casefold(),
+                )
+            )
+            items = dialogs
             return _result(ok=True, count=len(items), items=items)
         finally:
             await client.disconnect()
