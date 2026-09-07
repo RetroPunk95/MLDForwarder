@@ -1,4 +1,4 @@
-name: Build Windows test
+name: Build Windows v3.0.1
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -32,10 +32,20 @@ jobs:
         shell: cmd
         run: build_exe.bat ^< nul
 
-      - name: Upload portable package
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: cmd
+        run: build_installer.bat ^< nul
+
+      - name: Upload Windows packages
         uses: actions/upload-artifact@v4
         with:
-          name: MLDTools_Portable_route-fix
-          path: release/MLDTools_Portable.zip
+          name: MLDTools_v3.0.1_Windows
+          path: |
+            release/MLDTools_Portable.zip
+            release/installer/MLDTools_Setup_v3.0.1.exe
           if-no-files-found: error
           retention-days: 7
