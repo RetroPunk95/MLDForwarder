@@ -146,21 +146,60 @@ def normalizar_booleano(valor, padrao=False):
     )
 
 
-def montar_chave_rota(origem, topico_id=None):
+def montar_chave_rota(
+    origem,
+    topico_id=None,
+    destino=None,
+    topico_destino_id=None
+):
     """
     Gera uma chave única para o progresso e para channels.json.
 
-    Rotas antigas continuam usando apenas o ID da origem. Rotas de
-    tópico usam o formato "origem:topico", permitindo vários tópicos
-    do mesmo grupo sem colisão de configuração ou progresso.
+    Quando o destino não é informado, preserva o formato antigo para
+    manter compatibilidade com configurações e progressos existentes.
+    Novas rotas usam origem, tópico de origem, destino e tópico de destino,
+    permitindo várias rotas independentes a partir da mesma origem.
     """
     origem_normalizada = normalizar_peer(origem)
     topico_normalizado = normalizar_topico(topico_id)
 
-    if topico_normalizado is None:
-        return str(origem_normalizada)
+    if destino is None:
+        if topico_normalizado is None:
+            return str(origem_normalizada)
 
-    return f"{origem_normalizada}:{topico_normalizado}"
+        return f"{origem_normalizada}:{topico_normalizado}"
+
+    destino_normalizado = normalizar_peer(destino)
+    topico_destino_normalizado = normalizar_topico(topico_destino_id)
+
+    origem_chave = (
+        str(origem_normalizada)
+        if topico_normalizado is None
+        else f"{origem_normalizada}:{topico_normalizado}"
+    )
+    destino_chave = (
+        str(destino_normalizado)
+        if topico_destino_normalizado is None
+        else f"{destino_normalizado}:{topico_destino_normalizado}"
+    )
+
+    return f"{origem_chave}=>{destino_chave}"
+
+
+def assinatura_rota(
+    origem,
+    topico_id=None,
+    destino=None,
+    topico_destino_id=None
+):
+    """Retorna a identidade normalizada de uma rota para detectar duplicatas."""
+
+    return (
+        normalizar_peer(origem),
+        normalizar_topico(topico_id),
+        normalizar_peer(destino),
+        normalizar_topico(topico_destino_id)
+    )
 
 
 def _separar_chave_rota(chave):
@@ -229,14 +268,26 @@ def carregar_canais():
             configuracao.get("name", origem_normalizada)
         ).strip()
 
-        chave_rota = montar_chave_rota(
+        chave_rota = str(chave_armazenada).strip()
+        identidade = assinatura_rota(
             origem_normalizada,
-            topico_id
+            topico_id,
+            destino_normalizado,
+            topico_destino_id
         )
 
-        if chave_rota in canais:
+        if any(
+            assinatura_rota(
+                existente["source_id"],
+                existente.get("topic_id"),
+                existente["target_id"],
+                existente.get("target_topic_id")
+            ) == identidade
+            for existente in canais.values()
+        ):
             raise RuntimeError(
-                f"A rota {chave_rota} está duplicada em channels.json."
+                "A mesma combinação de origem, tópico de origem, destino "
+                "e tópico de destino está duplicada em channels.json."
             )
 
         canais[chave_rota] = {
