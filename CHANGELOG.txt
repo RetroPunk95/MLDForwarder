@@ -1,6 +1,13 @@
 MLD Tools — Histórico de versões
 ===================================
 
+3.0.1 / Rotas com múltiplos destinos
+------------------------------------
+- Permite criar várias rotas com a mesma origem para destinos diferentes.
+- Considera também os tópicos de origem e destino ao identificar duplicatas.
+- Bloqueia somente combinações de rota totalmente iguais.
+- Mantém compatibilidade com rotas e progressos das versões anteriores.
+
 Correção do pacote v3.0.0
 -------------------------
 - Reorganiza cards, campos, opções e ações em tempo real ao redimensionar.
