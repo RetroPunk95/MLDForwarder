@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 3.0.1 — Rotas com múltiplos destinos
+
+- Permite cadastrar várias rotas com a mesma origem quando os destinos ou tópicos de destino forem diferentes.
+- Mantém o bloqueio apenas para combinações totalmente duplicadas de origem, tópico de origem, destino e tópico de destino.
+- Preserva as chaves e os registros de progresso das rotas criadas em versões anteriores.
+
 ## Correção do pacote v3.0.0
 
 - Torna as duas interfaces responsivas durante o redimensionamento, reorganizando cards, campos, opções e grupos de ações por pontos de quebra.
