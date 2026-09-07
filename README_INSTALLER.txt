@@ -33,7 +33,7 @@ Esses arquivos são criados pelo próprio usuário/aplicativo.
 
 ATUALIZAÇÕES
 
-O MLDTools_Setup_v3.0.0.exe usa o mesmo identificador do MLDForwarder e é
+O MLDTools_Setup_v3.0.1.exe usa o mesmo identificador do MLDForwarder e é
 reconhecido como uma atualização. Feche o MLDForwarder e seus motores antes
 de executar o instalador. Ele reutiliza a pasta instalada anteriormente,
 mesmo que ela ainda se chame MLDForwarder.
