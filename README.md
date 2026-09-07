@@ -45,7 +45,7 @@ Baixe a versão mais recente na página de [Releases](https://github.com/RetroPu
 
 | Opção | Indicação |
 |---|---|
-| `MLDTools_Setup_v3.0.0.exe` | Instalação comum no Windows, com atalhos e desinstalador. |
+| `MLDTools_Setup_v3.0.1.exe` | Instalação comum no Windows, com atalhos e desinstalador. |
 | `MLDTools_Portable.zip` | Uso sem instalação. Extraia o ZIP antes de executar. |
 
 > O projeto ainda não possui assinatura digital. O Windows SmartScreen pode exibir um aviso de editor desconhecido. Confira se o arquivo veio desta página e valide o SHA-256 publicado na Release.
