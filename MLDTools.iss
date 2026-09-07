@@ -1,5 +1,5 @@
 #define MyAppName "MLD Tools"
-#define MyAppVersion "3.0.0"
+#define MyAppVersion "3.0.1"
 #define MyAppPublisher "Mídia Local Downloads"
 #define MyAppExeName "MLDTools.exe"
 

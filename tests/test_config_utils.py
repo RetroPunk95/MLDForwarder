@@ -72,6 +72,55 @@ class ConfigUtilsTests(unittest.TestCase):
 
         self.assertTrue(canais["-1001"]["download_reupload"])
 
+    def test_permite_mesma_origem_com_destinos_diferentes(self):
+        dados = {
+            "rota-1": {
+                "source_id": -1001,
+                "target_id": -1002,
+                "name": "Destino 1"
+            },
+            "rota-2": {
+                "source_id": -1001,
+                "target_id": -1003,
+                "name": "Destino 2"
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as temporario:
+            arquivo = Path(temporario) / "channels.json"
+            arquivo.write_text(
+                json.dumps(dados),
+                encoding="utf-8"
+            )
+
+            with patch.object(config_utils, "CHANNELS_FILE", arquivo):
+                canais = config_utils.carregar_canais()
+
+        self.assertEqual(len(canais), 2)
+
+    def test_rejeita_mesma_combinacao_de_origem_e_destino(self):
+        dados = {
+            "rota-1": {
+                "source_id": -1001,
+                "target_id": -1002
+            },
+            "rota-2": {
+                "source_id": -1001,
+                "target_id": -1002
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as temporario:
+            arquivo = Path(temporario) / "channels.json"
+            arquivo.write_text(
+                json.dumps(dados),
+                encoding="utf-8"
+            )
+
+            with patch.object(config_utils, "CHANNELS_FILE", arquivo):
+                with self.assertRaises(RuntimeError):
+                    config_utils.carregar_canais()
+
 
 if __name__ == "__main__":
     unittest.main()

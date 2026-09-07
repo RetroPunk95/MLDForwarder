@@ -45,7 +45,7 @@ if exist "Icon.ico" (
 )
 if errorlevel 1 goto :erro
 
-echo Instalador: release\installer\MLDTools_Setup_v3.0.0.exe
+echo Instalador: release\installer\MLDTools_Setup_v3.0.1.exe
 pause
 exit /b 0
 

@@ -1,4 +1,4 @@
-MLD Tools — Release Kit 3.0.0
+MLD Tools — Release Kit 3.0.1
 ================================
 
 OBJETIVO
@@ -172,7 +172,7 @@ INSTALLER WINDOWS
 
 Depois de validar os executáveis, este kit também pode gerar:
 
-    MLDTools_Setup_v3.0.0.exe
+    MLDTools_Setup_v3.0.1.exe
 
 O instalador:
 - instala por usuário em %LOCALAPPDATA%\MLDTools

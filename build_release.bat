@@ -9,5 +9,5 @@ call build_installer.bat
 if errorlevel 1 exit /b 1
 
 echo Portatil: release\MLDTools_Portable.zip
-echo Instalador: release\installer\MLDTools_Setup_v3.0.0.exe
+echo Instalador: release\installer\MLDTools_Setup_v3.0.1.exe
 pause

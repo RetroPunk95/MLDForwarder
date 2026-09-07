@@ -1,4 +1,4 @@
-# MLD Tools 3.0.0 — Guia completo do usuário
+# MLD Tools 3.0.1 — Guia completo do usuário
 
 ## Sincronize canais, grupos e tópicos do Telegram sem assinatura de encaminhamento
 
@@ -10,7 +10,7 @@ Também é possível criar várias rotas, usar tópicos tanto na origem quanto n
 
 Com ele, você pode criar rotas como canal → canal, canal → grupo, canal → tópico, grupo → grupo, grupo → tópico e tópico → tópico.
 
-Este guia foi preparado para o **MLD Tools 3.0.0**.
+Este guia foi preparado para o **MLD Tools 3.0.1**.
 
 > Use o programa apenas em canais e grupos aos quais você tem acesso e respeite as regras e os Termos de Serviço do Telegram. O MLD Tools não é uma ferramenta de spam.
 
@@ -36,7 +36,7 @@ Não é necessário instalar Python.
 
 ### Versão com instalador
 
-1. Baixe o arquivo `MLDTools_Setup_v3.0.0.exe`.
+1. Baixe o arquivo `MLDTools_Setup_v3.0.1.exe`.
 2. Abra o instalador e siga as instruções exibidas.
 3. Depois da instalação, abra o MLD Tools pelo atalho criado no Windows.
 
@@ -58,7 +58,7 @@ Não execute o programa diretamente de dentro do ZIP. Os componentes abaixo deve
 
 Você não precisa abrir os motores manualmente. O `MLDTools.exe` inicia cada componente quando necessário.
 
-> A versão 3.0.0 ainda não possui assinatura digital. Por isso, o Windows pode exibir um aviso do SmartScreen. Se o arquivo veio da fonte oficial do projeto, clique em **Mais informações** e depois em **Executar assim mesmo**.
+> A versão 3.0.1 ainda não possui assinatura digital. Por isso, o Windows pode exibir um aviso do SmartScreen. Se o arquivo veio da fonte oficial do projeto, clique em **Mais informações** e depois em **Executar assim mesmo**.
 
 ![Arquivos da versão portátil dentro da pasta extraída](images/01-pasta-portatil.png)
 
@@ -631,7 +631,7 @@ Antes de configurar canais importantes, crie uma origem e um destino de teste. E
 
 Depois do teste, você já pode cadastrar as rotas definitivas e manter o MLD Tools trabalhando no Dashboard.
 
-**MLD Tools 3.0.0 — sincronização organizada, histórico preservado e controle em uma única interface.**
+**MLD Tools 3.0.1 — sincronização organizada, histórico preservado e controle em uma única interface.**
 
 ---
 
