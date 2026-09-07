@@ -51,6 +51,7 @@ from config_utils import (
     carregar_json,
     ler_env,
     montar_chave_rota,
+    assinatura_rota,
     normalizar_peer,
     normalizar_topico,
     resolver_temp_parent_dir,
@@ -3808,13 +3809,31 @@ class MLDToolsGUI(ctk.CTk):
         item = dialog.resultado
         key = montar_chave_rota(
             item["source_id"],
-            item.get("topic_id")
+            item.get("topic_id"),
+            item["target_id"],
+            item.get("target_topic_id")
         )
 
-        if key in self.channels:
+        identidade = assinatura_rota(
+            item["source_id"],
+            item.get("topic_id"),
+            item["target_id"],
+            item.get("target_topic_id")
+        )
+
+        if any(
+            assinatura_rota(
+                existente.get("source_id", chave),
+                existente.get("topic_id"),
+                existente.get("target_id"),
+                existente.get("target_topic_id")
+            ) == identidade
+            for chave, existente in self.channels.items()
+        ):
             messagebox.showerror(
                 "Rota existente",
-                "Essa combinação de origem e tópico já está configurada."
+                "Essa combinação de origem, tópico de origem, destino e "
+                "tópico de destino já está configurada."
             )
             return
 
@@ -3909,16 +3928,33 @@ class MLDToolsGUI(ctk.CTk):
         item = dialog.resultado
         new_source = montar_chave_rota(
             item["source_id"],
-            item.get("topic_id")
+            item.get("topic_id"),
+            item["target_id"],
+            item.get("target_topic_id")
         )
 
-        if (
-            new_source != old_source
-            and new_source in self.channels
-        ):
+        identidade = assinatura_rota(
+            item["source_id"],
+            item.get("topic_id"),
+            item["target_id"],
+            item.get("target_topic_id")
+        )
+        duplicada = any(
+            chave != old_source
+            and assinatura_rota(
+                existente.get("source_id", chave),
+                existente.get("topic_id"),
+                existente.get("target_id"),
+                existente.get("target_topic_id")
+            ) == identidade
+            for chave, existente in self.channels.items()
+        )
+
+        if duplicada:
             messagebox.showerror(
                 "Rota existente",
-                "A nova combinação de origem e tópico já está configurada."
+                "A nova combinação de origem, tópico de origem, destino e "
+                "tópico de destino já está configurada."
             )
             return
 
